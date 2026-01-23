@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { ChatMessage } from '@/types';
 import MarkdownRenderer from './MarkdownRenderer';
-import { User, Bot, Copy, Check, Pencil, X, Save, RotateCw } from 'lucide-react';
+import ImageLightbox from './ImageLightbox';
+import { User, Bot, Copy, Check, Pencil, X, Save, RotateCw, Maximize2 } from 'lucide-react';
 import Image from 'next/image';
 
 interface MessageProps {
@@ -17,6 +18,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [copied, setCopied] = useState(false);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
@@ -161,15 +163,32 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
             </div>
 
             {message.imageUrl && (
-              <div className="relative w-64 h-64 rounded-lg overflow-hidden border border-slate-300">
+              <div
+                className="relative w-64 h-64 rounded-lg overflow-hidden border border-slate-300 cursor-pointer group"
+                onClick={() => setIsLightboxOpen(true)}
+              >
                 <Image
                   src={message.imageUrl}
                   alt="Uploaded image"
                   fill
-                  className="object-contain"
+                  className="object-contain transition-transform duration-200 group-hover:scale-105"
                   unoptimized
                 />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-full p-2">
+                    <Maximize2 className="w-5 h-5 text-white" />
+                  </div>
+                </div>
               </div>
+            )}
+
+            {message.imageUrl && (
+              <ImageLightbox
+                src={message.imageUrl}
+                alt="Uploaded image"
+                isOpen={isLightboxOpen}
+                onClose={() => setIsLightboxOpen(false)}
+              />
             )}
 
             <div className="text-slate-800 leading-relaxed text-base">

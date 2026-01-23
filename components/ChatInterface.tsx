@@ -319,6 +319,32 @@ export default function ChatInterface({
     }
   };
 
+  const handlePasteImage = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (isLoading) return;
+
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    let imageFile: File | null = null;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        imageFile = item.getAsFile();
+        break;
+      }
+    }
+
+    if (!imageFile) return;
+    if (!validateImageFile(imageFile)) return;
+
+    try {
+      const base64 = await convertImageToBase64(imageFile);
+      setImage(base64);
+    } catch (error) {
+      console.error('Error pasting image:', error);
+      alert('Failed to paste image');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -457,6 +483,7 @@ export default function ChatInterface({
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onPaste={handlePasteImage}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
