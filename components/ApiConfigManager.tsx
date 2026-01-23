@@ -9,6 +9,7 @@ export default function ApiConfigManager() {
   const [configs, setConfigs] = useState<ApiConfig[]>([]);
   const [editing, setEditing] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<ApiConfig>>({});
+  const [modelsInput, setModelsInput] = useState('');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function ApiConfigManager() {
     };
     setEditing(newConfig.id);
     setFormData(newConfig);
+    setModelsInput('');
   };
 
   const handleSave = () => {
@@ -54,6 +56,7 @@ export default function ApiConfigManager() {
   const handleEdit = (config: ApiConfig) => {
     setEditing(config.id);
     setFormData(config);
+    setModelsInput((config.models || []).join(', '));
   };
 
   const handleDelete = (id: string) => {
@@ -69,11 +72,16 @@ export default function ApiConfigManager() {
     }
     setEditing(null);
     setFormData({});
+    setModelsInput('');
   };
 
   const updateModels = (value: string) => {
-    const models = value.split(',').map(m => m.trim()).filter(Boolean);
-    setFormData({ ...formData, models });
+    setModelsInput(value);
+    const models = value
+      .split(/[,\s，]+/)
+      .map(m => m.trim())
+      .filter(Boolean);
+    setFormData((prev) => ({ ...prev, models }));
   };
 
   return (
@@ -121,7 +129,7 @@ export default function ApiConfigManager() {
                 <input
                   type="text"
                   placeholder="Models (comma-separated, e.g., gpt-4,gpt-3.5-turbo)"
-                  value={formData.models?.join(', ') || ''}
+                  value={modelsInput}
                   onChange={(e) => updateModels(e.target.value)}
                   className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
                 />
@@ -209,7 +217,7 @@ export default function ApiConfigManager() {
               <input
                 type="text"
                 placeholder="Models (comma-separated, e.g., gpt-4,gpt-3.5-turbo)"
-                value={formData.models?.join(', ') || ''}
+                value={modelsInput}
                 onChange={(e) => updateModels(e.target.value)}
                 className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
               />
