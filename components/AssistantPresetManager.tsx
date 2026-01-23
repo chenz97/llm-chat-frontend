@@ -180,31 +180,34 @@ export default function AssistantPresetManager() {
                 <div className="space-y-2">
                   <label className="text-base text-slate-600 font-medium">Model Parameters</label>
                   {Object.entries(formData.parameters || {}).map(([key, value]) => (
-                    <div key={key} className="flex gap-2">
+                    <div
+                      key={key}
+                      className="grid grid-cols-1 sm:grid-cols-[12rem_minmax(0,1fr)_auto] gap-2 items-start sm:items-center"
+                    >
                       <input
                         type="text"
                         value={key}
                         disabled
-                        className="px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700 w-48"
+                        className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700 sm:w-48"
                       />
                       <input
                         type="text"
                         value={value}
                         onChange={(e) => updateParameter(key, e.target.value)}
-                        className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                        className="w-full min-w-0 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
                       />
                       <button
                         onClick={() => updateParameter(key, '')}
-                        className="p-2.5 text-red-600 hover:bg-red-50 rounded-md"
+                        className="self-start sm:self-auto p-2.5 text-red-600 hover:bg-red-50 rounded-md"
                       >
                         <X className="w-4 h-4" />
                       </button>
                     </div>
                   ))}
 
-                  <div className="flex gap-2">
+                  <div className="w-full">
                     <select
-                      className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
                       onChange={(e) => {
                         if (e.target.value) {
                           addParameter(e.target.value);
@@ -225,18 +228,18 @@ export default function AssistantPresetManager() {
 
                   <div className="space-y-2 pt-2 border-t border-slate-200">
                     <label className="text-base text-slate-600 font-medium">Add Custom Parameter</label>
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-start sm:items-center">
                       <input
                         type="text"
                         placeholder="Parameter name"
                         id="custom-param-key"
-                        className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
                       />
                       <input
                         type="text"
                         placeholder="Value"
                         id="custom-param-value"
-                        className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                        className="w-full min-w-0 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
                       />
                       <button
                         onClick={() => {
@@ -277,12 +280,7 @@ export default function AssistantPresetManager() {
               <div>
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-xl text-slate-900">{preset.name}</h3>
-                      {defaultPresetId === preset.id && (
-                        <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                      )}
-                    </div>
+                    <h3 className="font-semibold text-xl text-slate-900">{preset.name}</h3>
                     <p className="text-base text-slate-600 mt-1">Model: {preset.modelId}</p>
                     {preset.systemPrompt && (
                       <p className="text-base text-slate-500 mt-1 line-clamp-2">
@@ -294,7 +292,7 @@ export default function AssistantPresetManager() {
                         {Object.entries(preset.parameters).map(([key, value]) => (
                           <span
                             key={key}
-                            className="px-2.5 py-1 bg-blue-100 text-blue-700 text-sm rounded-md border border-blue-200"
+                            className="px-2.5 py-1 bg-blue-100 text-blue-700 text-sm rounded-md border border-blue-200 break-all"
                           >
                             {key}: {value}
                           </span>
@@ -366,31 +364,34 @@ export default function AssistantPresetManager() {
               <div className="space-y-2">
                 <label className="text-base text-gray-400">Model Parameters</label>
                 {Object.entries(formData.parameters || {}).map(([key, value]) => (
-                  <div key={key} className="flex gap-2">
+                  <div
+                    key={key}
+                    className="grid grid-cols-1 sm:grid-cols-[12rem_minmax(0,1fr)_auto] gap-2 items-start sm:items-center"
+                  >
                     <input
                       type="text"
                       value={key}
                       disabled
-                      className="px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700 w-48"
+                      className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700 sm:w-48"
                     />
                     <input
                       type="text"
                       value={value}
                       onChange={(e) => updateParameter(key, e.target.value)}
-                      className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                      className="w-full min-w-0 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
                     />
                     <button
                       onClick={() => updateParameter(key, '')}
-                      className="p-2.5 text-red-600 hover:bg-red-50 rounded-md"
+                      className="self-start sm:self-auto p-2.5 text-red-600 hover:bg-red-50 rounded-md"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
                 ))}
 
-                <div className="flex gap-2">
+                <div className="w-full">
                   <select
-                    className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
                     onChange={(e) => {
                       if (e.target.value) {
                         addParameter(e.target.value);
@@ -411,18 +412,18 @@ export default function AssistantPresetManager() {
 
                 <div className="space-y-2 pt-2 border-t border-gray-700">
                   <label className="text-base text-slate-600 font-medium">Add Custom Parameter</label>
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-start sm:items-center">
                     <input
                       type="text"
                       placeholder="Parameter name"
                       id="custom-param-key-new"
-                      className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
                     />
                     <input
                       type="text"
                       placeholder="Value"
                       id="custom-param-value-new"
-                      className="flex-1 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                      className="w-full min-w-0 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
                     />
                     <button
                       onClick={() => {

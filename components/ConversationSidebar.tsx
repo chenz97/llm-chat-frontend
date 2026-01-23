@@ -128,6 +128,7 @@ export default function ConversationSidebar({
           </div>
         )}
       </div>
+
     </div>
   );
 }

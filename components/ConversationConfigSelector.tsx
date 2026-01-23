@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ApiConfig, AssistantPreset } from '@/types';
+import { Settings } from 'lucide-react';
 import { getApiConfigs, getAssistantPresets } from '@/lib/storage';
 
 interface ConversationConfigSelectorProps {
@@ -9,6 +10,7 @@ interface ConversationConfigSelectorProps {
   selectedPresetId?: string;
   onApiConfigChange: (id: string) => void;
   onPresetChange: (id: string | undefined) => void;
+  onOpenSettings?: () => void;
 }
 
 export default function ConversationConfigSelector({
@@ -16,6 +18,7 @@ export default function ConversationConfigSelector({
   selectedPresetId,
   onApiConfigChange,
   onPresetChange,
+  onOpenSettings,
 }: ConversationConfigSelectorProps) {
   const [apiConfigs, setApiConfigs] = useState<ApiConfig[]>([]);
   const [presets, setPresets] = useState<AssistantPreset[]>([]);
@@ -29,7 +32,18 @@ export default function ConversationConfigSelector({
 
   if (!mounted) {
     return (
-    <div className="app-panel px-4 py-4">
+    <div className="app-panel px-4 py-4 relative pr-10">
+      {onOpenSettings && (
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="absolute top-3 right-3 p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+          title="Settings"
+          aria-label="Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+      )}
       <div className="grid grid-cols-1 gap-3">
         <div>
           <label className="block text-base font-medium text-slate-700 mb-1.5">
@@ -53,7 +67,18 @@ export default function ConversationConfigSelector({
 }
 
   return (
-    <div className="app-panel px-4 py-4 flex-shrink-0">
+    <div className="app-panel px-4 py-4 flex-shrink-0 relative pr-10">
+      {onOpenSettings && (
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="absolute top-3 right-3 p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+          title="Settings"
+          aria-label="Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+      )}
       <div className="grid grid-cols-1 gap-3">
         <div>
           <label htmlFor="api-config-select" className="block text-base font-medium text-slate-700 mb-1.5">

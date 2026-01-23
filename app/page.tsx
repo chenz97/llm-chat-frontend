@@ -14,7 +14,7 @@ import ConversationSidebar from '@/components/ConversationSidebar';
 import ChatInterface from '@/components/ChatInterface';
 import SettingsModal from '@/components/SettingsModal';
 import ConversationConfigSelector from '@/components/ConversationConfigSelector';
-import { Settings, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 
 export default function Home() {
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
@@ -203,6 +203,7 @@ export default function Home() {
                   selectedPresetId={selectedPresetId}
                   onApiConfigChange={handleApiConfigChange}
                   onPresetChange={handlePresetChange}
+                  onOpenSettings={() => setIsSettingsOpen(true)}
                 />
               )}
             </div>
@@ -236,6 +237,7 @@ export default function Home() {
                 selectedPresetId={selectedPresetId}
                 onApiConfigChange={handleApiConfigChange}
                 onPresetChange={handlePresetChange}
+                onOpenSettings={() => setIsSettingsOpen(true)}
               />
             )}
           </div>
@@ -261,15 +263,6 @@ export default function Home() {
           {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       )}
-
-      <button
-        onClick={() => setIsSettingsOpen(true)}
-        className="fixed bottom-3 left-3 z-[80] p-2.5 bg-white border border-slate-200 text-slate-600 hover:text-slate-900 rounded-full shadow-md hover:bg-slate-50 transition-all duration-200"
-        title="Settings"
-        aria-label="Settings"
-      >
-        <Settings className="w-5 h-5" />
-      </button>
 
       <SettingsModal
         isOpen={isSettingsOpen}
