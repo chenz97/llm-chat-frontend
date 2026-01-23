@@ -7,6 +7,7 @@ import {
   saveConversation,
   generateId,
   getCurrentConversationId,
+  setCurrentConversationId,
   getApiConfigs,
   getDefaultPresetId,
 } from '@/lib/storage';
@@ -118,6 +119,7 @@ export default function Home() {
     };
 
     saveConversation(newConversation);
+    setCurrentConversationId(newConversation.id);
     setCurrentConversation(newConversation);
     setSelectedPresetId(presetToUse);
     setIsSidebarOpen(false);
@@ -126,12 +128,14 @@ export default function Home() {
 
   const handleSelectConversation = (id: string | null) => {
     if (!id) {
+      setCurrentConversationId(null);
       setCurrentConversation(null);
       return;
     }
 
     const conv = getConversation(id);
     if (conv) {
+      setCurrentConversationId(conv.id);
       setCurrentConversation(conv);
       setSelectedApiConfigId(conv.apiConfigId);
       setSelectedPresetId(conv.assistantPresetId);
