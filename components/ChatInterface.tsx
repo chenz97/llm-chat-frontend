@@ -13,7 +13,7 @@ import {
 import { streamChatCompletion, convertToOpenAIMessages } from '@/lib/api';
 import { convertImageToBase64, validateImageFile } from '@/lib/imageUtils';
 import Message from './Message';
-import { Send, Image as ImageIcon, Loader2, Square } from 'lucide-react';
+import { Send, Image as ImageIcon, Loader2, Square, ArrowDown } from 'lucide-react';
 
 interface ChatInterfaceProps {
   conversation: Conversation | null;
@@ -30,10 +30,14 @@ export default function ChatInterface({
   const [isLoading, setIsLoading] = useState(false);
   const [apiConfig, setApiConfig] = useState<ApiConfig | null>(null);
   const [assistantPreset, setAssistantPreset] = useState<AssistantPreset | null>(null);
+  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const autoScrollEnabledRef = useRef(true);
+  const previousConversationIdRef = useRef<string | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
   const streamingConversationIdRef = useRef<string | null>(null);
   const isStreamingRef = useRef(false);
@@ -65,11 +69,19 @@ export default function ChatInterface({
       setAssistantPreset(null);
     }
 
-    activeConversationIdRef.current = conversation?.id ?? null;
+    const conversationId = conversation?.id ?? null;
+    activeConversationIdRef.current = conversationId;
 
     if (!conversation) {
       setIsLoading(false);
+      previousConversationIdRef.current = null;
       return;
+    }
+
+    if (conversationId !== previousConversationIdRef.current) {
+      autoScrollEnabledRef.current = true;
+      setIsAutoScrollEnabled(true);
+      previousConversationIdRef.current = conversationId;
     }
 
     if (
@@ -83,11 +95,32 @@ export default function ChatInterface({
   }, [conversation]);
 
   useEffect(() => {
-    scrollToBottom();
+    if (autoScrollEnabledRef.current) {
+      scrollToBottom();
+    }
   }, [messages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleScroll = () => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const shouldAutoScroll = distanceFromBottom <= 80;
+
+    if (shouldAutoScroll !== autoScrollEnabledRef.current) {
+      autoScrollEnabledRef.current = shouldAutoScroll;
+      setIsAutoScrollEnabled(shouldAutoScroll);
+    }
+  };
+
+  const handleJumpToBottom = () => {
+    autoScrollEnabledRef.current = true;
+    setIsAutoScrollEnabled(true);
+    scrollToBottom();
   };
 
   const flushPendingPersist = () => {
@@ -426,8 +459,12 @@ export default function ChatInterface({
   }
 
   return (
-    <div className="app-panel flex-1 min-h-0 flex flex-col overflow-hidden">
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-4 pt-3 pb-3">
+    <div className="app-panel flex-1 min-h-0 flex flex-col overflow-hidden relative">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-4 pt-3 pb-3"
+      >
         <div className="space-y-2.5">
           {messages.map((message) => (
             <Message
@@ -441,6 +478,18 @@ export default function ChatInterface({
           <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {!isAutoScrollEnabled && (
+        <button
+          type="button"
+          onClick={handleJumpToBottom}
+          className="absolute right-4 bottom-24 z-20 w-9 h-9 bg-white border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 rounded-full shadow-md transition-all duration-200 flex items-center justify-center"
+          aria-label="跳到底部"
+          title="跳到底部"
+        >
+          <ArrowDown className="w-4 h-4" />
+        </button>
+      )}
 
       <div className="flex-shrink-0 border-t border-slate-200/70 bg-slate-50/95 backdrop-blur-sm px-3 sm:px-4 py-3 shadow-lg">
         <div className="w-full">
