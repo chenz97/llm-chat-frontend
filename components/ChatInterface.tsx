@@ -1,0 +1,506 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { Conversation, ChatMessage, ApiConfig, AssistantPreset } from '@/types';
+import {
+  getConversation,
+  saveConversation,
+  updateConversationMessages,
+  generateId,
+  getApiConfig,
+  getAssistantPreset,
+} from '@/lib/storage';
+import { streamChatCompletion, convertToOpenAIMessages } from '@/lib/api';
+import { convertImageToBase64, validateImageFile } from '@/lib/imageUtils';
+import Message from './Message';
+import { Send, Image as ImageIcon, Loader2, Square } from 'lucide-react';
+
+interface ChatInterfaceProps {
+  conversation: Conversation | null;
+  onConversationUpdate: () => void;
+}
+
+export default function ChatInterface({
+  conversation,
+  onConversationUpdate,
+}: ChatInterfaceProps) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [image, setImage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiConfig, setApiConfig] = useState<ApiConfig | null>(null);
+  const [assistantPreset, setAssistantPreset] = useState<AssistantPreset | null>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  const activeConversationIdRef = useRef<string | null>(null);
+  const streamingConversationIdRef = useRef<string | null>(null);
+  const isStreamingRef = useRef(false);
+  const lastPersistAtRef = useRef(0);
+  const persistTimerRef = useRef<number | null>(null);
+  const pendingPersistRef = useRef<{ id: string; messages: ChatMessage[] } | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    if (conversation) {
+      setMessages(conversation.messages);
+
+      const config = getApiConfig(conversation.apiConfigId);
+      setApiConfig(config || null);
+
+      if (conversation.assistantPresetId) {
+        const preset = getAssistantPreset(conversation.assistantPresetId);
+        setAssistantPreset(preset || null);
+      } else {
+        setAssistantPreset(null);
+      }
+    } else {
+      setMessages([]);
+      setApiConfig(null);
+      setAssistantPreset(null);
+    }
+
+    activeConversationIdRef.current = conversation?.id ?? null;
+
+    if (!conversation) {
+      setIsLoading(false);
+      return;
+    }
+
+    if (
+      streamingConversationIdRef.current === conversation.id
+      && isStreamingRef.current
+    ) {
+      setIsLoading(true);
+    } else {
+      setIsLoading(false);
+    }
+  }, [conversation]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const flushPendingPersist = () => {
+    if (!pendingPersistRef.current) {
+      persistTimerRef.current = null;
+      return;
+    }
+
+    updateConversationMessages(
+      pendingPersistRef.current.id,
+      pendingPersistRef.current.messages
+    );
+    lastPersistAtRef.current = Date.now();
+    pendingPersistRef.current = null;
+    persistTimerRef.current = null;
+  };
+
+  const persistStreamMessages = (conversationId: string, messagesToPersist: ChatMessage[]) => {
+    pendingPersistRef.current = { id: conversationId, messages: messagesToPersist };
+
+    const now = Date.now();
+    if (now - lastPersistAtRef.current > 400) {
+      flushPendingPersist();
+      return;
+    }
+
+    if (persistTimerRef.current === null) {
+      const delay = Math.max(120, 400 - (now - lastPersistAtRef.current));
+      persistTimerRef.current = window.setTimeout(flushPendingPersist, delay);
+    }
+  };
+
+  const clearPersistTimer = () => {
+    if (persistTimerRef.current !== null) {
+      window.clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    pendingPersistRef.current = null;
+  };
+
+  const stopStreaming = () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    isStreamingRef.current = false;
+    streamingConversationIdRef.current = null;
+    clearPersistTimer();
+
+    if (conversation) {
+      updateConversationMessages(conversation.id, messagesRef.current);
+      window.dispatchEvent(new Event('conversationsUpdated'));
+    }
+
+    if (activeConversationIdRef.current === conversation?.id) {
+      setIsLoading(false);
+    }
+  };
+
+  const resolveTitle = (baseMessages: ChatMessage[], titleSeed?: string) => {
+    if (!conversation || conversation.title !== 'New Conversation') {
+      return conversation?.title || 'New Conversation';
+    }
+
+    const candidate = titleSeed?.trim()
+      || baseMessages.slice().reverse().find((msg) => msg.role === 'user')?.content;
+
+    return candidate ? candidate.slice(0, 50) : conversation.title;
+  };
+
+  const startAssistantResponse = async (baseMessages: ChatMessage[], titleSeed?: string) => {
+    if (!conversation || !apiConfig) return;
+
+    const conversationId = conversation.id;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+    const assistantMessageId = generateId();
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+    };
+
+    let streamMessages = [...baseMessages, assistantMessage];
+
+    setIsLoading(true);
+    streamingConversationIdRef.current = conversationId;
+    isStreamingRef.current = true;
+
+    if (activeConversationIdRef.current === conversationId) {
+      setMessages(streamMessages);
+    }
+
+    const pendingConversation: Conversation = {
+      ...conversation,
+      messages: streamMessages,
+      title: resolveTitle(baseMessages, titleSeed),
+      updatedAt: Date.now(),
+    };
+
+    saveConversation(pendingConversation);
+    onConversationUpdate();
+    window.dispatchEvent(new Event('conversationsUpdated'));
+
+    const apiMessages = convertToOpenAIMessages(baseMessages);
+
+    if (assistantPreset?.systemPrompt) {
+      apiMessages.unshift({
+        role: 'system',
+        content: assistantPreset.systemPrompt,
+      });
+    }
+
+    let accumulatedContent = '';
+
+    try {
+      await streamChatCompletion(
+        apiConfig.baseUrl,
+        apiConfig.apiKey,
+        {
+          model: assistantPreset?.modelId || apiConfig.models[0] || 'gpt-3.5-turbo',
+          messages: apiMessages,
+          ...(assistantPreset?.parameters || {}),
+        },
+        {
+          onMessage: (chunk) => {
+            accumulatedContent += chunk;
+            streamMessages = streamMessages.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: accumulatedContent }
+                : msg
+            );
+
+            if (activeConversationIdRef.current === conversationId) {
+              setMessages(streamMessages);
+            }
+
+            persistStreamMessages(conversationId, streamMessages);
+          },
+          onError: (error) => {
+            if (error.name === 'AbortError') {
+              if (activeConversationIdRef.current === conversationId) {
+                setIsLoading(false);
+              }
+              isStreamingRef.current = false;
+              streamingConversationIdRef.current = null;
+              abortControllerRef.current = null;
+              clearPersistTimer();
+              return;
+            }
+
+            console.error('Streaming error:', error);
+            streamMessages = streamMessages.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: `Error: ${error.message}` }
+                : msg
+            );
+
+            persistStreamMessages(conversationId, streamMessages);
+
+            if (activeConversationIdRef.current === conversationId) {
+              setMessages(streamMessages);
+              setIsLoading(false);
+            }
+
+            isStreamingRef.current = false;
+            streamingConversationIdRef.current = null;
+            clearPersistTimer();
+          },
+          onComplete: () => {
+            const finalMessages = [
+              ...baseMessages,
+              { ...assistantMessage, content: accumulatedContent },
+            ];
+
+            const updatedConversation: Conversation = {
+              ...conversation,
+              messages: finalMessages,
+              title: resolveTitle(baseMessages, titleSeed),
+              updatedAt: Date.now(),
+            };
+
+            saveConversation(updatedConversation);
+            onConversationUpdate();
+            if (activeConversationIdRef.current === conversationId) {
+              setMessages(finalMessages);
+              setIsLoading(false);
+            }
+
+            isStreamingRef.current = false;
+            streamingConversationIdRef.current = null;
+            abortControllerRef.current = null;
+            clearPersistTimer();
+
+            window.dispatchEvent(new Event('conversationsUpdated'));
+          },
+        },
+        {
+          signal: abortControllerRef.current?.signal,
+        }
+      );
+    } catch (error) {
+      console.error('Error sending message:', error);
+      if (activeConversationIdRef.current === conversationId) {
+        setIsLoading(false);
+      }
+      isStreamingRef.current = false;
+      streamingConversationIdRef.current = null;
+      abortControllerRef.current = null;
+      clearPersistTimer();
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!validateImageFile(file)) return;
+
+    try {
+      const base64 = await convertImageToBase64(file);
+      setImage(base64);
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert('Failed to upload image');
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const trimmedInput = input.trim();
+    if (!trimmedInput || !conversation || !apiConfig || isLoading) return;
+
+    const userMessage: ChatMessage = {
+      id: generateId(),
+      role: 'user',
+      content: trimmedInput,
+      imageUrl: image || undefined,
+      timestamp: Date.now(),
+    };
+
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+    setInput('');
+    setImage(null);
+    await startAssistantResponse(newMessages, trimmedInput);
+  };
+
+  const handleRegenerate = async (messageId: string) => {
+    if (!conversation || !apiConfig || isLoading) return;
+
+    const targetIndex = messages.findIndex((msg) => msg.id === messageId);
+    if (targetIndex === -1) return;
+
+    const targetMessage = messages[targetIndex];
+    if (targetMessage.role === 'system') return;
+
+    const baseMessages = targetMessage.role === 'assistant'
+      ? messages.slice(0, targetIndex)
+      : messages.slice(0, targetIndex + 1);
+
+    if (baseMessages.length === 0) return;
+
+    await startAssistantResponse(baseMessages);
+  };
+
+  const handleEditMessage = (id: string, newContent: string) => {
+    if (!conversation) return;
+
+    const updatedMessages = messages.map((msg) =>
+      msg.id === id ? { ...msg, content: newContent } : msg
+    );
+
+    setMessages(updatedMessages);
+
+    const updatedConversation: Conversation = {
+      ...conversation,
+      messages: updatedMessages,
+      updatedAt: Date.now(),
+    };
+
+    saveConversation(updatedConversation);
+    onConversationUpdate();
+    window.dispatchEvent(new Event('conversationsUpdated'));
+  };
+
+  if (!conversation) {
+    return (
+      <div className="app-panel flex-1 flex items-center justify-center text-slate-500 px-8 py-6">
+        <p className="text-center">Select a conversation or create a new one to start chatting</p>
+      </div>
+    );
+  }
+
+  if (!apiConfig) {
+    return (
+      <div className="app-panel flex-1 flex items-center justify-center px-8 py-6">
+        <div className="text-center">
+          <p className="text-red-400 mb-3">API configuration not found</p>
+          <p className="text-gray-500 text-sm">
+            Please set up an API configuration in Settings
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-panel flex-1 min-h-0 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-4 pt-3 pb-3">
+        <div className="space-y-2.5">
+          {messages.map((message) => (
+            <Message
+              key={message.id}
+              message={message}
+              onEdit={handleEditMessage}
+              onRegenerate={handleRegenerate}
+              assistantName={assistantPreset?.name}
+            />
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      <div className="flex-shrink-0 border-t border-slate-200/70 bg-slate-50/95 backdrop-blur-sm px-3 sm:px-4 py-3 shadow-lg">
+        <div className="w-full">
+          {image && (
+            <div className="mb-4 relative inline-block">
+              <img
+                src={image}
+                alt="Upload preview"
+                className="max-w-xs max-h-32 rounded-lg border border-slate-300"
+              />
+              <button
+                onClick={() => setImage(null)}
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 shadow-sm transition-colors duration-200 text-sm"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="flex gap-3 items-center">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading}
+              className="w-11 h-11 flex items-center justify-center bg-white text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              title="Upload image"
+            >
+              <ImageIcon className="w-5 h-5" />
+            </button>
+
+            <div className="flex-1 relative">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit(e);
+                  }
+                }}
+                placeholder="Type your message... (Shift+Enter for new line)"
+                disabled={isLoading}
+                rows={1}
+                className="w-full px-4 py-2 bg-white text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 resize-none min-h-[44px] max-h-32 text-base"
+                style={{
+                  height: 'auto',
+                  overflowY: input.split('\n').length > 3 ? 'auto' : 'hidden'
+                }}
+                onInput={(e) => {
+                  e.currentTarget.style.height = 'auto';
+                  e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px';
+                }}
+              />
+            </div>
+
+            {isLoading ? (
+              <button
+                type="button"
+                onClick={stopStreaming}
+                className="w-11 h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center transition-all duration-200 relative"
+                title="停止生成"
+                aria-label="停止生成"
+              >
+                <Loader2 className="absolute w-6 h-6 animate-spin text-white/80" />
+                <Square className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim()}
+                className="w-11 h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-200"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            )}
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
