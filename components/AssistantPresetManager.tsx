@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AssistantPreset, ModelParameters } from '@/types';
+import { AssistantPreset, ApiConfig } from '@/types';
 import {
   getAssistantPresets,
   saveAssistantPreset,
@@ -18,6 +18,7 @@ export default function AssistantPresetManager() {
   const [editing, setEditing] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<AssistantPreset>>({});
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [apiConfigs, setApiConfigs] = useState<ApiConfig[]>([]);
   const [mounted, setMounted] = useState(false);
   const [defaultPresetId, setDefaultPresetIdState] = useState<string | null>(null);
 
@@ -28,6 +29,7 @@ export default function AssistantPresetManager() {
 
     // Get all available models from API configs
     const configs = getApiConfigs();
+    setApiConfigs(configs);
     const models = configs.flatMap(c => c.models);
     setAvailableModels([...new Set(models)]);
   }, []);
@@ -36,10 +38,38 @@ export default function AssistantPresetManager() {
     return null;
   }
 
+  const resolveModelsForProvider = (providerId?: string) => {
+    if (!providerId) {
+      return availableModels;
+    }
+
+    const provider = apiConfigs.find(config => config.id === providerId);
+    return provider?.models || [];
+  };
+
+  const handleProviderChange = (providerId: string) => {
+    const normalizedId = providerId || undefined;
+    const modelsForProvider = resolveModelsForProvider(normalizedId);
+    let nextModelId = formData.modelId || '';
+
+    if (normalizedId) {
+      if (modelsForProvider.length === 0) {
+        nextModelId = '';
+      } else if (!modelsForProvider.includes(nextModelId)) {
+        nextModelId = modelsForProvider[0];
+      }
+    } else if (availableModels.length > 0 && !availableModels.includes(nextModelId)) {
+      nextModelId = availableModels[0];
+    }
+
+    setFormData({ ...formData, apiConfigId: normalizedId, modelId: nextModelId });
+  };
+
   const handleAdd = () => {
     const newPreset: AssistantPreset = {
       id: generateId(),
       name: 'New Assistant',
+      apiConfigId: undefined,
       modelId: availableModels[0] || '',
       systemPrompt: '',
       parameters: {},
@@ -55,6 +85,7 @@ export default function AssistantPresetManager() {
     const preset: AssistantPreset = {
       id: formData.id,
       name: formData.name || 'Unnamed Assistant',
+      apiConfigId: formData.apiConfigId || undefined,
       modelId: formData.modelId || '',
       systemPrompt: formData.systemPrompt || '',
       parameters: formData.parameters || {},
@@ -122,6 +153,8 @@ export default function AssistantPresetManager() {
     setFormData({ ...formData, parameters: params });
   };
 
+  const modelOptions = resolveModelsForProvider(formData.apiConfigId);
+
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-center">
@@ -159,12 +192,25 @@ export default function AssistantPresetManager() {
                 />
 
                 <select
+                  value={formData.apiConfigId || ''}
+                  onChange={(e) => handleProviderChange(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                >
+                  <option value="">No provider (use current API config)</option>
+                  {apiConfigs.map((config) => (
+                    <option key={config.id} value={config.id}>
+                      {config.name}
+                    </option>
+                  ))}
+                </select>
+
+                <select
                   value={formData.modelId || ''}
                   onChange={(e) => setFormData({ ...formData, modelId: e.target.value })}
                   className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
                 >
                   <option value="">Select Model</option>
-                  {availableModels.map(model => (
+                  {modelOptions.map(model => (
                     <option key={model} value={model}>{model}</option>
                   ))}
                 </select>
@@ -282,6 +328,11 @@ export default function AssistantPresetManager() {
                   <div className="flex-1">
                     <h3 className="font-semibold text-xl text-slate-900">{preset.name}</h3>
                     <p className="text-base text-slate-600 mt-1">Model: {preset.modelId}</p>
+                    {preset.apiConfigId && (
+                      <p className="text-sm text-slate-500 mt-1">
+                        Provider: {apiConfigs.find((config) => config.id === preset.apiConfigId)?.name || 'Unknown provider'}
+                      </p>
+                    )}
                     {preset.systemPrompt && (
                       <p className="text-base text-slate-500 mt-1 line-clamp-2">
                         {preset.systemPrompt}
@@ -343,12 +394,25 @@ export default function AssistantPresetManager() {
               />
 
               <select
+                value={formData.apiConfigId || ''}
+                onChange={(e) => handleProviderChange(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+              >
+                <option value="">No provider (use current API config)</option>
+                {apiConfigs.map((config) => (
+                  <option key={config.id} value={config.id}>
+                    {config.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
                 value={formData.modelId || ''}
                 onChange={(e) => setFormData({ ...formData, modelId: e.target.value })}
                 className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
               >
                 <option value="">Select Model</option>
-                {availableModels.map(model => (
+                {modelOptions.map(model => (
                   <option key={model} value={model}>{model}</option>
                 ))}
               </select>

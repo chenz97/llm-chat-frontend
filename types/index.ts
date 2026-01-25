@@ -41,6 +41,7 @@ export interface ModelParameters {
 export interface AssistantPreset {
   id: string;
   name: string;
+  apiConfigId?: string;
   modelId: string;
   systemPrompt: string;
   parameters: ModelParameters;

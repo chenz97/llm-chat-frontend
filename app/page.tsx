@@ -10,6 +10,8 @@ import {
   setCurrentConversationId,
   getApiConfigs,
   getDefaultPresetId,
+  getAssistantPreset,
+  getApiConfig,
 } from '@/lib/storage';
 import ConversationSidebar from '@/components/ConversationSidebar';
 import ChatInterface from '@/components/ChatInterface';
@@ -98,20 +100,26 @@ export default function Home() {
   }
 
   const handleNewConversation = () => {
-    if (!selectedApiConfigId) {
+    // Always use default preset if set, otherwise undefined
+    const defaultPresetId = getDefaultPresetId();
+    const defaultPreset = defaultPresetId ? getAssistantPreset(defaultPresetId) : undefined;
+    const presetProviderId = defaultPreset?.apiConfigId && getApiConfig(defaultPreset.apiConfigId)
+      ? defaultPreset.apiConfigId
+      : undefined;
+    const apiConfigIdToUse = presetProviderId || selectedApiConfigId;
+
+    if (!apiConfigIdToUse) {
       alert('Please select an API configuration first');
       setIsSettingsOpen(true);
       return;
     }
 
-    // Always use default preset if set, otherwise undefined
-    const defaultPreset = getDefaultPresetId();
-    const presetToUse = defaultPreset || undefined;
+    const presetToUse = defaultPresetId || undefined;
 
     const newConversation: Conversation = {
       id: generateId(),
       title: 'New Conversation',
-      apiConfigId: selectedApiConfigId,
+      apiConfigId: apiConfigIdToUse,
       assistantPresetId: presetToUse,
       messages: [],
       createdAt: Date.now(),
@@ -121,6 +129,7 @@ export default function Home() {
     saveConversation(newConversation);
     setCurrentConversationId(newConversation.id);
     setCurrentConversation(newConversation);
+    setSelectedApiConfigId(apiConfigIdToUse);
     setSelectedPresetId(presetToUse);
     setIsSidebarOpen(false);
     window.dispatchEvent(new Event('conversationsUpdated'));
@@ -166,12 +175,24 @@ export default function Home() {
   };
 
   const handlePresetChange = (id: string | undefined) => {
+    const preset = id ? getAssistantPreset(id) : undefined;
+    const presetProviderId = preset?.apiConfigId && getApiConfig(preset.apiConfigId)
+      ? preset.apiConfigId
+      : undefined;
+    const currentApiConfigId = currentConversation?.apiConfigId || selectedApiConfigId;
+    const nextApiConfigId = presetProviderId || currentApiConfigId;
+
     setSelectedPresetId(id);
+
+    if (presetProviderId) {
+      setSelectedApiConfigId(presetProviderId);
+    }
 
     if (currentConversation) {
       const updated = {
         ...currentConversation,
         assistantPresetId: id,
+        apiConfigId: nextApiConfigId,
       };
       saveConversation(updated);
       setCurrentConversation(updated);
