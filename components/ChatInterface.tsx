@@ -39,7 +39,6 @@ export default function ChatInterface({
   const [assistantPreset, setAssistantPreset] = useState<AssistantPreset | null>(null);
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -103,12 +102,16 @@ export default function ChatInterface({
 
   useEffect(() => {
     if (autoScrollEnabledRef.current) {
-      scrollToBottom();
+      scrollToBottom(isStreamingRef.current ? 'auto' : 'smooth');
     }
   }, [messages]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const maxScrollTop = container.scrollHeight - container.clientHeight;
+    container.scrollTo({ top: Math.max(0, maxScrollTop), behavior });
   };
 
   const handleScroll = () => {
@@ -127,7 +130,7 @@ export default function ChatInterface({
   const handleJumpToBottom = () => {
     autoScrollEnabledRef.current = true;
     setIsAutoScrollEnabled(true);
-    scrollToBottom();
+    scrollToBottom('auto');
   };
 
   const flushPendingPersist = () => {
@@ -505,7 +508,6 @@ export default function ChatInterface({
               assistantName={assistantPreset?.name}
             />
           ))}
-          <div ref={messagesEndRef} />
         </div>
       </div>
 
