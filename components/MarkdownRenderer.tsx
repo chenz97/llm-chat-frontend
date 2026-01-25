@@ -12,6 +12,107 @@ interface MarkdownRendererProps {
   content: string;
 }
 
+function isEscaped(text: string, index: number): boolean {
+  let backslashes = 0;
+  for (let i = index - 1; i >= 0 && text[i] === '\\'; i--) {
+    backslashes++;
+  }
+  return backslashes % 2 === 1;
+}
+
+function replaceMathDelimitersInLine(line: string): string {
+  let result = '';
+  let i = 0;
+  let inCode = false;
+  let codeTickCount = 0;
+
+  while (i < line.length) {
+    const ch = line[i];
+    if (ch === '`') {
+      let tickCount = 1;
+      while (i + tickCount < line.length && line[i + tickCount] === '`') {
+        tickCount++;
+      }
+      if (!inCode) {
+        inCode = true;
+        codeTickCount = tickCount;
+      } else if (tickCount === codeTickCount) {
+        inCode = false;
+        codeTickCount = 0;
+      }
+      result += '`'.repeat(tickCount);
+      i += tickCount;
+      continue;
+    }
+
+    if (!inCode) {
+      if (line.startsWith('\\(', i) && !isEscaped(line, i)) {
+        result += '$';
+        i += 2;
+        continue;
+      }
+      if (line.startsWith('\\)', i) && !isEscaped(line, i)) {
+        result += '$';
+        i += 2;
+        continue;
+      }
+      if (line.startsWith('\\[', i) && !isEscaped(line, i)) {
+        result += '$$';
+        i += 2;
+        continue;
+      }
+      if (line.startsWith('\\]', i) && !isEscaped(line, i)) {
+        result += '$$';
+        i += 2;
+        continue;
+      }
+    }
+
+    result += ch;
+    i++;
+  }
+
+  return result;
+}
+
+function normalizeMathDelimiters(source: string): string {
+  const lines = source.split('\n');
+  const output: string[] = [];
+  let inFence = false;
+  let fenceChar = '';
+  let fenceLength = 0;
+
+  for (const line of lines) {
+    const fenceMatch = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (fenceMatch) {
+      const marker = fenceMatch[1];
+      if (!inFence) {
+        inFence = true;
+        fenceChar = marker[0];
+        fenceLength = marker.length;
+        output.push(line);
+        continue;
+      }
+      if (marker[0] === fenceChar && marker.length >= fenceLength) {
+        inFence = false;
+        fenceChar = '';
+        fenceLength = 0;
+        output.push(line);
+        continue;
+      }
+    }
+
+    if (inFence) {
+      output.push(line);
+      continue;
+    }
+
+    output.push(replaceMathDelimitersInLine(line));
+  }
+
+  return output.join('\n');
+}
+
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
     <div className="markdown-body prose prose-invert max-w-none">
@@ -52,7 +153,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
           },
         }}
       >
-        {content}
+        {normalizeMathDelimiters(content)}
       </ReactMarkdown>
     </div>
   );
