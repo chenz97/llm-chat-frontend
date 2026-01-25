@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Conversation, ChatMessage, ApiConfig, AssistantPreset, TokenUsage } from '@/types';
+import {
+  Conversation,
+  ChatMessage,
+  ApiConfig,
+  AssistantPreset,
+  TokenUsage,
+  ChatCompletionRequest,
+} from '@/types';
 import {
   getConversation,
   saveConversation,
@@ -236,7 +243,7 @@ export default function ChatInterface({
     let accumulatedContent = '';
     let latestUsage: TokenUsage | null = null;
 
-    const request = {
+    const request: ChatCompletionRequest = {
       model: assistantPreset?.modelId || apiConfig.models[0] || 'gpt-3.5-turbo',
       messages: apiMessages,
       ...(assistantPreset?.parameters || {}),
