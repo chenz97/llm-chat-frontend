@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Conversation } from '@/types';
 import {
   getConversation,
   saveConversation,
   generateId,
-  getCurrentConversationId,
   setCurrentConversationId,
   getApiConfigs,
   getDefaultPresetId,
@@ -28,27 +27,45 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCompactLayout, setIsCompactLayout] = useState(false);
 
+  const createConversation = useCallback((apiConfigId: string, presetId?: string) => {
+    const newConversation: Conversation = {
+      id: generateId(),
+      title: 'New Conversation',
+      apiConfigId,
+      assistantPresetId: presetId,
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    saveConversation(newConversation);
+    setCurrentConversationId(newConversation.id);
+    setCurrentConversation(newConversation);
+    setSelectedApiConfigId(apiConfigId);
+    setSelectedPresetId(presetId);
+    setIsSidebarOpen(false);
+    window.dispatchEvent(new Event('conversationsUpdated'));
+  }, []);
+
   useEffect(() => {
     setMounted(true);
-
-    const savedConvId = getCurrentConversationId();
-    if (savedConvId) {
-      const conv = getConversation(savedConvId);
-      if (conv) {
-        setCurrentConversation(conv);
-        setSelectedApiConfigId(conv.apiConfigId);
-        setSelectedPresetId(conv.assistantPresetId);
-        return;
-      }
-    }
 
     const configs = getApiConfigs();
     if (configs.length === 0) {
       setIsSettingsOpen(true);
-    } else {
-      setSelectedApiConfigId(configs[0].id);
+      return;
     }
-  }, []);
+
+    const defaultPresetId = getDefaultPresetId();
+    const defaultPreset = defaultPresetId ? getAssistantPreset(defaultPresetId) : undefined;
+    const presetProviderId = defaultPreset?.apiConfigId && getApiConfig(defaultPreset.apiConfigId)
+      ? defaultPreset.apiConfigId
+      : undefined;
+    const apiConfigIdToUse = presetProviderId || configs[0].id;
+    const presetToUse = defaultPresetId || undefined;
+
+    createConversation(apiConfigIdToUse, presetToUse);
+  }, [createConversation]);
 
   useEffect(() => {
     const portraitQuery = window.matchMedia('(orientation: portrait)');
@@ -100,13 +117,8 @@ export default function Home() {
   }
 
   const handleNewConversation = () => {
-    // Always use default preset if set, otherwise undefined
-    const defaultPresetId = getDefaultPresetId();
-    const defaultPreset = defaultPresetId ? getAssistantPreset(defaultPresetId) : undefined;
-    const presetProviderId = defaultPreset?.apiConfigId && getApiConfig(defaultPreset.apiConfigId)
-      ? defaultPreset.apiConfigId
-      : undefined;
-    const apiConfigIdToUse = presetProviderId || selectedApiConfigId;
+    const apiConfigIdToUse = currentConversation?.apiConfigId || selectedApiConfigId;
+    const presetToUse = currentConversation?.assistantPresetId ?? selectedPresetId;
 
     if (!apiConfigIdToUse) {
       alert('Please select an API configuration first');
@@ -114,25 +126,7 @@ export default function Home() {
       return;
     }
 
-    const presetToUse = defaultPresetId || undefined;
-
-    const newConversation: Conversation = {
-      id: generateId(),
-      title: 'New Conversation',
-      apiConfigId: apiConfigIdToUse,
-      assistantPresetId: presetToUse,
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    saveConversation(newConversation);
-    setCurrentConversationId(newConversation.id);
-    setCurrentConversation(newConversation);
-    setSelectedApiConfigId(apiConfigIdToUse);
-    setSelectedPresetId(presetToUse);
-    setIsSidebarOpen(false);
-    window.dispatchEvent(new Event('conversationsUpdated'));
+    createConversation(apiConfigIdToUse, presetToUse);
   };
 
   const handleSelectConversation = (id: string | null) => {
