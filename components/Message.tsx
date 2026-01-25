@@ -24,6 +24,16 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
   const isSystem = message.role === 'system';
   const canRegenerate = !isSystem && !!onRegenerate;
   const assistantLabel = assistantName?.trim() || 'Assistant';
+  const promptTokens = message.usage?.prompt_tokens;
+  const reasoningTokens = message.usage?.reasoning_tokens;
+  const completionTokens = message.usage?.completion_tokens;
+  const showUsage = !isUser
+    && !isSystem
+    && (
+      promptTokens !== undefined
+      || reasoningTokens !== undefined
+      || completionTokens !== undefined
+    );
 
   const copyWithFallback = async (text: string) => {
     if (navigator.clipboard && window.isSecureContext) {
@@ -203,6 +213,11 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
                 <div className="whitespace-pre-wrap">{message.content}</div>
               ) : (
                 <MarkdownRenderer content={message.content} />
+              )}
+              {showUsage && (
+                <div className="mt-2 text-xs text-slate-400 text-right">
+                  prompt {promptTokens ?? '-'} | reasoning {reasoningTokens ?? '-'} | completion {completionTokens ?? '-'}
+                </div>
               )}
             </div>
 

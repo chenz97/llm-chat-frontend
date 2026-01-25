@@ -1,9 +1,39 @@
-import { Message, ChatCompletionRequest } from '@/types';
+import { Message, ChatCompletionRequest, TokenUsage } from '@/types';
 
 export interface StreamCallbacks {
   onMessage: (chunk: string) => void;
   onError: (error: Error) => void;
   onComplete: () => void;
+  onUsage?: (usage: TokenUsage) => void;
+}
+
+function coerceNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function extractUsage(data: any): TokenUsage | null {
+  const usage = data?.usage;
+  if (!usage) return null;
+
+  const promptTokens = coerceNumber(usage.prompt_tokens);
+  const completionTokens = coerceNumber(usage.completion_tokens);
+  const reasoningTokens = coerceNumber(
+    usage.reasoning_tokens ?? usage.completion_tokens_details?.reasoning_tokens
+  );
+
+  if (
+    promptTokens === undefined
+    && completionTokens === undefined
+    && reasoningTokens === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    prompt_tokens: promptTokens,
+    reasoning_tokens: reasoningTokens,
+    completion_tokens: completionTokens,
+  };
 }
 
 export async function streamChatCompletion(
@@ -77,6 +107,11 @@ export async function streamChatCompletion(
             const content = data.choices?.[0]?.delta?.content;
             if (content) {
               onMessage(content);
+            }
+
+            const usage = extractUsage(data);
+            if (usage) {
+              callbacks.onUsage?.(usage);
             }
           } catch (e) {
             console.error('Error parsing SSE data:', e, trimmedLine);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Conversation, ChatMessage, ApiConfig, AssistantPreset } from '@/types';
+import { Conversation, ChatMessage, ApiConfig, AssistantPreset, TokenUsage } from '@/types';
 import {
   getConversation,
   saveConversation,
@@ -234,22 +234,45 @@ export default function ChatInterface({
     }
 
     let accumulatedContent = '';
+    let latestUsage: TokenUsage | null = null;
+
+    const request = {
+      model: assistantPreset?.modelId || apiConfig.models[0] || 'gpt-3.5-turbo',
+      messages: apiMessages,
+      ...(assistantPreset?.parameters || {}),
+    };
+
+    const streamOptions = request.stream_options;
+    request.stream_options = {
+      ...(typeof streamOptions === 'object' && streamOptions !== null ? streamOptions : {}),
+      include_usage: true,
+    };
 
     try {
       await streamChatCompletion(
         apiConfig.baseUrl,
         apiConfig.apiKey,
-        {
-          model: assistantPreset?.modelId || apiConfig.models[0] || 'gpt-3.5-turbo',
-          messages: apiMessages,
-          ...(assistantPreset?.parameters || {}),
-        },
+        request,
         {
           onMessage: (chunk) => {
             accumulatedContent += chunk;
             streamMessages = streamMessages.map((msg) =>
               msg.id === assistantMessageId
                 ? { ...msg, content: accumulatedContent }
+                : msg
+            );
+
+            if (activeConversationIdRef.current === conversationId) {
+              setMessages(streamMessages);
+            }
+
+            persistStreamMessages(conversationId, streamMessages);
+          },
+          onUsage: (usage) => {
+            latestUsage = usage;
+            streamMessages = streamMessages.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, usage }
                 : msg
             );
 
@@ -292,7 +315,7 @@ export default function ChatInterface({
           onComplete: () => {
             const finalMessages = [
               ...baseMessages,
-              { ...assistantMessage, content: accumulatedContent },
+              { ...assistantMessage, content: accumulatedContent, usage: latestUsage || undefined },
             ];
 
             const updatedConversation: Conversation = {

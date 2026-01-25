@@ -47,11 +47,18 @@ export interface AssistantPreset {
   createdAt: number;
 }
 
+export interface TokenUsage {
+  prompt_tokens?: number;
+  reasoning_tokens?: number;
+  completion_tokens?: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'system' | 'user' | 'assistant';
   content: string;
   imageUrl?: string; // For user uploaded images
+  usage?: TokenUsage;
   timestamp: number;
 }
 
