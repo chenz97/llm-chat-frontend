@@ -104,19 +104,19 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
       }`}
     >
       <div className="w-full">
-        <div className="flex gap-2.5 sm:gap-3">
-          <div className="flex-shrink-0">
-            <div className={`w-9 h-9 rounded-md flex items-center justify-center ${
-              isUser
-                ? 'bg-blue-600'
-                : 'bg-green-600'
-            }`}>
-              {isUser ? <User className="w-5 h-5 text-white" /> : <Bot className="w-5 h-5 text-white" />}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="flex-shrink-0">
+              <div className={`w-9 h-9 rounded-md flex items-center justify-center ${
+                isUser
+                  ? 'bg-blue-600'
+                  : 'bg-green-600'
+              }`}>
+                {isUser ? <User className="w-5 h-5 text-white" /> : <Bot className="w-5 h-5 text-white" />}
+              </div>
             </div>
-          </div>
 
-          <div className="flex-1 min-w-0 space-y-1.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between min-w-0 flex-1">
               <div className="font-medium text-base text-slate-700">
                 {isUser ? 'You' : assistantLabel}
               </div>
@@ -171,7 +171,9 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
                 )}
               </div>
             </div>
+          </div>
 
+          <div className="space-y-2">
             {message.imageUrl && (
               <div
                 className="relative w-64 h-64 rounded-lg overflow-hidden border border-slate-300 cursor-pointer group"
@@ -220,7 +222,6 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
                 </div>
               )}
             </div>
-
           </div>
         </div>
       </div>
