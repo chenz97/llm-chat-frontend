@@ -52,26 +52,28 @@ const sanitizeApiConfigs = (rawConfigs: unknown): ApiConfig[] => {
 const sanitizeAssistantPresets = (rawPresets: unknown): AssistantPreset[] => {
   if (!Array.isArray(rawPresets)) return [];
 
-  return rawPresets
-    .map((preset) => {
-      if (!isRecord(preset)) return null;
-      const id = typeof preset.id === 'string' ? preset.id : '';
-      const name = typeof preset.name === 'string' ? preset.name : '';
-      if (!id || !name) return null;
+  const sanitized: AssistantPreset[] = [];
 
-      const parameters = isRecord(preset.parameters) ? preset.parameters : {};
+  for (const preset of rawPresets) {
+    if (!isRecord(preset)) continue;
+    const id = typeof preset.id === 'string' ? preset.id : '';
+    const name = typeof preset.name === 'string' ? preset.name : '';
+    if (!id || !name) continue;
 
-      return {
-        id,
-        name,
-        apiConfigId: typeof preset.apiConfigId === 'string' ? preset.apiConfigId : undefined,
-        modelId: typeof preset.modelId === 'string' ? preset.modelId : '',
-        systemPrompt: typeof preset.systemPrompt === 'string' ? preset.systemPrompt : '',
-        parameters: parameters as AssistantPreset['parameters'],
-        createdAt: typeof preset.createdAt === 'number' ? preset.createdAt : Date.now(),
-      };
-    })
-    .filter((preset): preset is AssistantPreset => Boolean(preset));
+    const parameters = isRecord(preset.parameters) ? preset.parameters : {};
+
+    sanitized.push({
+      id,
+      name,
+      apiConfigId: typeof preset.apiConfigId === 'string' ? preset.apiConfigId : undefined,
+      modelId: typeof preset.modelId === 'string' ? preset.modelId : '',
+      systemPrompt: typeof preset.systemPrompt === 'string' ? preset.systemPrompt : '',
+      parameters: parameters as AssistantPreset['parameters'],
+      createdAt: typeof preset.createdAt === 'number' ? preset.createdAt : Date.now(),
+    });
+  }
+
+  return sanitized;
 };
 
 const buildExportData = (): SettingsExport => ({
