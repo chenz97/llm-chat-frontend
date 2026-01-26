@@ -29,10 +29,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </button>
         </div>
 
-        <div className="flex gap-2 border-b border-slate-200 px-4 sm:px-5">
+        <div className="flex flex-wrap gap-2 border-b border-slate-200 px-3 sm:px-5 py-1">
           <button
             onClick={() => setActiveTab('api')}
-            className={`px-5 py-3 text-base font-medium ${
+            className={`px-3 py-2 text-sm font-medium whitespace-nowrap sm:px-5 sm:py-3 sm:text-base ${
               activeTab === 'api'
                 ? 'text-blue-600 border-b-2 border-blue-600'
                 : 'text-slate-600 hover:text-slate-900'
@@ -42,7 +42,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </button>
           <button
             onClick={() => setActiveTab('presets')}
-            className={`px-5 py-3 text-base font-medium ${
+            className={`px-3 py-2 text-sm font-medium whitespace-nowrap sm:px-5 sm:py-3 sm:text-base ${
               activeTab === 'presets'
                 ? 'text-blue-600 border-b-2 border-blue-600'
                 : 'text-slate-600 hover:text-slate-900'
@@ -52,7 +52,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </button>
           <button
             onClick={() => setActiveTab('transfer')}
-            className={`px-5 py-3 text-base font-medium ${
+            className={`px-3 py-2 text-sm font-medium whitespace-nowrap sm:px-5 sm:py-3 sm:text-base ${
               activeTab === 'transfer'
                 ? 'text-blue-600 border-b-2 border-blue-600'
                 : 'text-slate-600 hover:text-slate-900'
