@@ -96,6 +96,7 @@ export default function AssistantPresetManager() {
     setPresets(getAssistantPresets());
     setEditing(null);
     setFormData({});
+    window.dispatchEvent(new Event('settingsUpdated'));
   };
 
   const handleEdit = (preset: AssistantPreset) => {
@@ -108,6 +109,7 @@ export default function AssistantPresetManager() {
       deleteAssistantPreset(id);
       setPresets(getAssistantPresets());
       setDefaultPresetIdState(getDefaultPresetId());
+      window.dispatchEvent(new Event('settingsUpdated'));
     }
   };
 
@@ -119,6 +121,7 @@ export default function AssistantPresetManager() {
       setDefaultPresetId(id);
       setDefaultPresetIdState(id);
     }
+    window.dispatchEvent(new Event('settingsUpdated'));
   };
 
   const handleCancel = () => {

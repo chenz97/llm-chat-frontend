@@ -72,3 +72,11 @@ export interface Conversation {
   createdAt: number;
   updatedAt: number;
 }
+
+export interface SettingsExport {
+  version: 1;
+  exportedAt: number;
+  apiConfigs: ApiConfig[];
+  assistantPresets: AssistantPreset[];
+  defaultPresetId: string | null;
+}

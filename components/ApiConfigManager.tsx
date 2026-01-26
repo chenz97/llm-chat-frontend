@@ -51,6 +51,7 @@ export default function ApiConfigManager() {
     setConfigs(getApiConfigs());
     setEditing(null);
     setFormData({});
+    window.dispatchEvent(new Event('settingsUpdated'));
   };
 
   const handleEdit = (config: ApiConfig) => {
@@ -63,6 +64,7 @@ export default function ApiConfigManager() {
     if (confirm('Are you sure you want to delete this API configuration?')) {
       deleteApiConfig(id);
       setConfigs(getApiConfigs());
+      window.dispatchEvent(new Event('settingsUpdated'));
     }
   };
 

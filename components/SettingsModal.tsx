@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import ApiConfigManager from './ApiConfigManager';
 import AssistantPresetManager from './AssistantPresetManager';
+import SettingsTransfer from './SettingsTransfer';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -11,7 +12,7 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'api' | 'presets'>('api');
+  const [activeTab, setActiveTab] = useState<'api' | 'presets' | 'transfer'>('api');
 
   if (!isOpen) return null;
 
@@ -49,11 +50,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           >
             Assistant Presets
           </button>
+          <button
+            onClick={() => setActiveTab('transfer')}
+            className={`px-5 py-3 text-base font-medium ${
+              activeTab === 'transfer'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Import/Export
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 sm:p-6">
           {activeTab === 'api' && <ApiConfigManager />}
           {activeTab === 'presets' && <AssistantPresetManager />}
+          {activeTab === 'transfer' && <SettingsTransfer />}
         </div>
       </div>
     </div>

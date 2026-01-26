@@ -36,6 +36,10 @@ export function getApiConfigs(): ApiConfig[] {
   return getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, []);
 }
 
+export function setApiConfigs(configs: ApiConfig[]): void {
+  saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
+}
+
 export function saveApiConfig(config: ApiConfig): void {
   const configs = getApiConfigs();
   const index = configs.findIndex(c => c.id === config.id);
@@ -61,6 +65,10 @@ export function getApiConfig(id: string): ApiConfig | undefined {
 // Assistant Presets
 export function getAssistantPresets(): AssistantPreset[] {
   return getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, []);
+}
+
+export function setAssistantPresets(presets: AssistantPreset[]): void {
+  saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
 }
 
 export function saveAssistantPreset(preset: AssistantPreset): void {

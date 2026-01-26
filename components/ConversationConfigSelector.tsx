@@ -30,6 +30,16 @@ export default function ConversationConfigSelector({
     setPresets(getAssistantPresets());
   }, []);
 
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      setApiConfigs(getApiConfigs());
+      setPresets(getAssistantPresets());
+    };
+
+    window.addEventListener('settingsUpdated', handleSettingsUpdate);
+    return () => window.removeEventListener('settingsUpdated', handleSettingsUpdate);
+  }, []);
+
   if (!mounted) {
     return (
     <div className="app-panel px-4 py-4 relative pr-10">
