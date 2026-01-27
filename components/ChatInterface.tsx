@@ -10,7 +10,6 @@ import {
   ChatCompletionRequest,
 } from '@/types';
 import {
-  getConversation,
   saveConversation,
   updateConversationMessages,
   generateId,
@@ -24,7 +23,7 @@ import { Send, Image as ImageIcon, Loader2, Square, ArrowDown } from 'lucide-rea
 
 interface ChatInterfaceProps {
   conversation: Conversation | null;
-  onConversationUpdate: (conversationId?: string) => void;
+  onConversationUpdate: (conversationId?: string) => void | Promise<void>;
 }
 
 export default function ChatInterface({
@@ -133,19 +132,17 @@ export default function ChatInterface({
     scrollToBottom('auto');
   };
 
-  const flushPendingPersist = () => {
-    if (!pendingPersistRef.current) {
+  const flushPendingPersist = async () => {
+    const pending = pendingPersistRef.current;
+    if (!pending) {
       persistTimerRef.current = null;
       return;
     }
 
-    updateConversationMessages(
-      pendingPersistRef.current.id,
-      pendingPersistRef.current.messages
-    );
-    lastPersistAtRef.current = Date.now();
     pendingPersistRef.current = null;
     persistTimerRef.current = null;
+    await updateConversationMessages(pending.id, pending.messages);
+    lastPersistAtRef.current = Date.now();
   };
 
   const persistStreamMessages = (conversationId: string, messagesToPersist: ChatMessage[]) => {
@@ -153,13 +150,15 @@ export default function ChatInterface({
 
     const now = Date.now();
     if (now - lastPersistAtRef.current > 400) {
-      flushPendingPersist();
+      void flushPendingPersist();
       return;
     }
 
     if (persistTimerRef.current === null) {
       const delay = Math.max(120, 400 - (now - lastPersistAtRef.current));
-      persistTimerRef.current = window.setTimeout(flushPendingPersist, delay);
+      persistTimerRef.current = window.setTimeout(() => {
+        void flushPendingPersist();
+      }, delay);
     }
   };
 
@@ -179,11 +178,14 @@ export default function ChatInterface({
     clearPersistTimer();
 
     if (conversation) {
-      const didSave = updateConversationMessages(conversation.id, messagesRef.current);
-      if (didSave) {
-        onConversationUpdate(conversation.id);
-      }
-      window.dispatchEvent(new Event('conversationsUpdated'));
+      const finalize = async () => {
+        const didSave = await updateConversationMessages(conversation.id, messagesRef.current);
+        if (didSave) {
+          await onConversationUpdate(conversation.id);
+        }
+        window.dispatchEvent(new Event('conversationsUpdated'));
+      };
+      void finalize();
     }
 
     if (activeConversationIdRef.current === conversation?.id) {
@@ -234,9 +236,9 @@ export default function ChatInterface({
       updatedAt: Date.now(),
     };
 
-    const didSavePending = saveConversation(pendingConversation);
+    const didSavePending = await saveConversation(pendingConversation);
     if (didSavePending) {
-      onConversationUpdate(conversationId);
+      await onConversationUpdate(conversationId);
     }
     window.dispatchEvent(new Event('conversationsUpdated'));
 
@@ -353,21 +355,24 @@ export default function ChatInterface({
               updatedAt: Date.now(),
             };
 
-            const didSaveFinal = saveConversation(updatedConversation);
-            if (didSaveFinal) {
-              onConversationUpdate(conversationId);
-            }
-            if (activeConversationIdRef.current === conversationId) {
-              setMessages(finalMessages);
-              setIsLoading(false);
-            }
+            const finalize = async () => {
+              if (activeConversationIdRef.current === conversationId) {
+                setMessages(finalMessages);
+                setIsLoading(false);
+              }
 
-            isStreamingRef.current = false;
-            streamingConversationIdRef.current = null;
-            abortControllerRef.current = null;
-            clearPersistTimer();
+              isStreamingRef.current = false;
+              streamingConversationIdRef.current = null;
+              abortControllerRef.current = null;
+              clearPersistTimer();
 
-            window.dispatchEvent(new Event('conversationsUpdated'));
+              const didSaveFinal = await saveConversation(updatedConversation);
+              if (didSaveFinal) {
+                await onConversationUpdate(conversationId);
+              }
+              window.dispatchEvent(new Event('conversationsUpdated'));
+            };
+            void finalize();
           },
         },
         {
@@ -485,11 +490,14 @@ export default function ChatInterface({
       updatedAt: Date.now(),
     };
 
-    const didSaveEdit = saveConversation(updatedConversation);
-    if (didSaveEdit) {
-      onConversationUpdate(conversation.id);
-    }
-    window.dispatchEvent(new Event('conversationsUpdated'));
+    const saveEdit = async () => {
+      const didSaveEdit = await saveConversation(updatedConversation);
+      if (didSaveEdit) {
+        await onConversationUpdate(conversation.id);
+      }
+      window.dispatchEvent(new Event('conversationsUpdated'));
+    };
+    void saveEdit();
   };
 
   if (!conversation) {

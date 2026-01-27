@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Conversation } from '@/types';
 import { getConversations, deleteConversation, setCurrentConversationId } from '@/lib/storage';
 import { MessageSquare, Trash2, Plus } from 'lucide-react';
@@ -18,29 +18,34 @@ export default function ConversationSidebar({
 }: ConversationSidebarProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [mounted, setMounted] = useState(false);
+  const mountedRef = useRef(false);
 
-  const loadConversations = useCallback(() => {
-    const convs = getConversations().sort((a, b) => b.updatedAt - a.updatedAt);
+  const loadConversations = useCallback(async () => {
+    const convs = await getConversations();
+    if (!mountedRef.current) return;
+    convs.sort((a, b) => b.updatedAt - a.updatedAt);
     setConversations(convs);
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     setMounted(true);
-    loadConversations();
+    void loadConversations();
 
     const handleStorageChange = () => {
-      loadConversations();
+      void loadConversations();
     };
 
     window.addEventListener('conversationsUpdated', handleStorageChange);
     return () => {
+      mountedRef.current = false;
       window.removeEventListener('conversationsUpdated', handleStorageChange);
     };
   }, []);
 
   useEffect(() => {
     if (mounted) {
-      loadConversations();
+      void loadConversations();
     }
   }, [currentConversationId, loadConversations, mounted]);
 
@@ -48,18 +53,24 @@ export default function ConversationSidebar({
     e.stopPropagation();
 
     if (confirm('Are you sure you want to delete this conversation?')) {
-      deleteConversation(id);
-      loadConversations();
+      const runDelete = async () => {
+        await deleteConversation(id);
+        await loadConversations();
 
-      if (currentConversationId === id) {
-        onSelectConversation(null);
-      }
+        if (currentConversationId === id) {
+          onSelectConversation(null);
+        }
+      };
+      void runDelete();
     }
   };
 
   const handleSelect = (id: string) => {
-    setCurrentConversationId(id);
-    onSelectConversation(id);
+    const selectConversation = async () => {
+      await setCurrentConversationId(id);
+      onSelectConversation(id);
+    };
+    void selectConversation();
   };
 
   if (!mounted) {

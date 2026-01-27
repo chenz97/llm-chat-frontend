@@ -3,10 +3,24 @@ import { ApiConfig, AssistantPreset, Conversation, ChatMessage } from '@/types';
 const STORAGE_KEYS = {
   API_CONFIGS: 'llm_chat_api_configs',
   ASSISTANT_PRESETS: 'llm_chat_assistant_presets',
-  CONVERSATIONS: 'llm_chat_conversations',
-  CURRENT_CONVERSATION_ID: 'llm_chat_current_conversation_id',
   DEFAULT_PRESET_ID: 'llm_chat_default_preset_id',
 } as const;
+
+const DB_CONFIG = {
+  NAME: 'llm_chat_db',
+  VERSION: 1,
+} as const;
+
+const DB_STORES = {
+  CONVERSATIONS: 'conversations',
+  META: 'meta',
+} as const;
+
+const META_KEYS = {
+  CURRENT_CONVERSATION_ID: 'current_conversation_id',
+} as const;
+
+let dbPromise: Promise<IDBDatabase> | null = null;
 
 // Generic storage helpers
 function getFromStorage<T>(key: string, defaultValue: T): T {
@@ -31,6 +45,52 @@ function saveToStorage<T>(key: string, value: T): boolean {
     console.error(`Error saving to localStorage (${key}):`, error);
     return false;
   }
+}
+
+function isIndexedDbAvailable(): boolean {
+  return typeof window !== 'undefined' && typeof indexedDB !== 'undefined';
+}
+
+function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('IndexedDB request failed'));
+  });
+}
+
+function transactionComplete(tx: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+    tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed'));
+  });
+}
+
+function openDb(): Promise<IDBDatabase> {
+  if (!isIndexedDbAvailable()) {
+    return Promise.reject(new Error('IndexedDB is not available'));
+  }
+
+  if (dbPromise) return dbPromise;
+
+  dbPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_CONFIG.NAME, DB_CONFIG.VERSION);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(DB_STORES.CONVERSATIONS)) {
+        db.createObjectStore(DB_STORES.CONVERSATIONS, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(DB_STORES.META)) {
+        db.createObjectStore(DB_STORES.META, { keyPath: 'key' });
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
+  });
+
+  return dbPromise;
 }
 
 // API Configs
@@ -110,97 +170,145 @@ export function setDefaultPresetId(id: string | null): void {
 }
 
 // Conversations
-export function getConversations(): Conversation[] {
-  return getFromStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, []);
+export async function getConversations(): Promise<Conversation[]> {
+  if (!isIndexedDbAvailable()) return [];
+
+  try {
+    const db = await openDb();
+    const tx = db.transaction(DB_STORES.CONVERSATIONS, 'readonly');
+    const store = tx.objectStore(DB_STORES.CONVERSATIONS);
+    const result = await requestToPromise(store.getAll());
+    await transactionComplete(tx);
+    return Array.isArray(result) ? result : [];
+  } catch (error) {
+    console.error('Error loading conversations from IndexedDB:', error);
+    return [];
+  }
 }
 
-function saveConversationsWithFallback(
-  conversations: Conversation[],
-  preserveId?: string
-): boolean {
-  if (saveToStorage(STORAGE_KEYS.CONVERSATIONS, conversations)) {
+export async function saveConversation(conversation: Conversation): Promise<boolean> {
+  if (!isIndexedDbAvailable()) return false;
+
+  try {
+    const db = await openDb();
+    const tx = db.transaction(DB_STORES.CONVERSATIONS, 'readwrite');
+    const store = tx.objectStore(DB_STORES.CONVERSATIONS);
+
+    const payload = {
+      ...conversation,
+      updatedAt: Date.now(),
+    };
+
+    store.put(payload);
+    await transactionComplete(tx);
     return true;
+  } catch (error) {
+    console.error('Error saving conversation to IndexedDB:', error);
+    return false;
   }
-
-  let working = [...conversations];
-  const prunable = working
-    .filter(c => c.id !== preserveId)
-    .sort((a, b) => a.updatedAt - b.updatedAt);
-
-  for (const conv of prunable) {
-    working = working.filter(c => c.id !== conv.id);
-    if (saveToStorage(STORAGE_KEYS.CONVERSATIONS, working)) {
-      console.warn('Storage quota exceeded; removed an older conversation to free space.');
-      return true;
-    }
-  }
-
-  if (preserveId) {
-    const preserved = conversations.find(c => c.id === preserveId);
-    const fallback = preserved ? [preserved] : [];
-    if (saveToStorage(STORAGE_KEYS.CONVERSATIONS, fallback)) {
-      console.warn('Storage quota exceeded; kept only the active conversation.');
-      return true;
-    }
-  }
-
-  console.error('Failed to save conversations: localStorage quota exceeded.');
-  return false;
 }
 
-export function saveConversation(conversation: Conversation): boolean {
-  const conversations = getConversations();
-  const index = conversations.findIndex(c => c.id === conversation.id);
-
-  conversation.updatedAt = Date.now();
-
-  if (index >= 0) {
-    conversations[index] = conversation;
-  } else {
-    conversations.push(conversation);
-  }
-
-  return saveConversationsWithFallback(conversations, conversation.id);
-}
-
-export function updateConversationMessages(
+export async function updateConversationMessages(
   conversationId: string,
   messages: ChatMessage[]
-): boolean {
-  const conversations = getConversations();
-  const index = conversations.findIndex(c => c.id === conversationId);
+): Promise<boolean> {
+  if (!isIndexedDbAvailable()) return false;
 
-  if (index < 0) return false;
+  try {
+    const db = await openDb();
+    const tx = db.transaction(DB_STORES.CONVERSATIONS, 'readwrite');
+    const store = tx.objectStore(DB_STORES.CONVERSATIONS);
+    const existing = await requestToPromise<Conversation | undefined>(store.get(conversationId));
 
-  conversations[index] = {
-    ...conversations[index],
-    messages,
-  };
+    if (!existing) {
+      await transactionComplete(tx);
+      return false;
+    }
 
-  return saveConversationsWithFallback(conversations, conversationId);
-}
-
-export function deleteConversation(id: string): void {
-  const conversations = getConversations().filter(c => c.id !== id);
-  saveToStorage(STORAGE_KEYS.CONVERSATIONS, conversations);
-
-  // Clear current conversation if it was deleted
-  if (getCurrentConversationId() === id) {
-    setCurrentConversationId(null);
+    store.put({
+      ...existing,
+      messages,
+    });
+    await transactionComplete(tx);
+    return true;
+  } catch (error) {
+    console.error('Error updating conversation messages in IndexedDB:', error);
+    return false;
   }
 }
 
-export function getConversation(id: string): Conversation | undefined {
-  return getConversations().find(c => c.id === id);
+export async function deleteConversation(id: string): Promise<void> {
+  if (!isIndexedDbAvailable()) return;
+
+  try {
+    const currentId = await getCurrentConversationId();
+    const db = await openDb();
+    const tx = db.transaction(DB_STORES.CONVERSATIONS, 'readwrite');
+    const store = tx.objectStore(DB_STORES.CONVERSATIONS);
+    store.delete(id);
+    await transactionComplete(tx);
+
+    if (currentId === id) {
+      await setCurrentConversationId(null);
+    }
+  } catch (error) {
+    console.error('Error deleting conversation from IndexedDB:', error);
+  }
+}
+
+export async function getConversation(id: string): Promise<Conversation | undefined> {
+  if (!isIndexedDbAvailable()) return undefined;
+
+  try {
+    const db = await openDb();
+    const tx = db.transaction(DB_STORES.CONVERSATIONS, 'readonly');
+    const store = tx.objectStore(DB_STORES.CONVERSATIONS);
+    const result = await requestToPromise<Conversation | undefined>(store.get(id));
+    await transactionComplete(tx);
+    return result;
+  } catch (error) {
+    console.error('Error loading conversation from IndexedDB:', error);
+    return undefined;
+  }
 }
 
 // Current Conversation
-export function getCurrentConversationId(): string | null {
-  return getFromStorage<string | null>(STORAGE_KEYS.CURRENT_CONVERSATION_ID, null);
+export async function getCurrentConversationId(): Promise<string | null> {
+  if (!isIndexedDbAvailable()) return null;
+
+  try {
+    const db = await openDb();
+    const tx = db.transaction(DB_STORES.META, 'readonly');
+    const store = tx.objectStore(DB_STORES.META);
+    const entry = await requestToPromise<{ key: string; value: string } | undefined>(
+      store.get(META_KEYS.CURRENT_CONVERSATION_ID)
+    );
+    await transactionComplete(tx);
+    return entry?.value ?? null;
+  } catch (error) {
+    console.error('Error loading current conversation id from IndexedDB:', error);
+    return null;
+  }
 }
 
-export function setCurrentConversationId(id: string | null): void {
-  saveToStorage(STORAGE_KEYS.CURRENT_CONVERSATION_ID, id);
+export async function setCurrentConversationId(id: string | null): Promise<void> {
+  if (!isIndexedDbAvailable()) return;
+
+  try {
+    const db = await openDb();
+    const tx = db.transaction(DB_STORES.META, 'readwrite');
+    const store = tx.objectStore(DB_STORES.META);
+
+    if (id === null) {
+      store.delete(META_KEYS.CURRENT_CONVERSATION_ID);
+    } else {
+      store.put({ key: META_KEYS.CURRENT_CONVERSATION_ID, value: id });
+    }
+
+    await transactionComplete(tx);
+  } catch (error) {
+    console.error('Error saving current conversation id to IndexedDB:', error);
+  }
 }
 
 // Utility function to generate unique IDs
