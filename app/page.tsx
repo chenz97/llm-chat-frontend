@@ -146,12 +146,14 @@ export default function Home() {
     }
   };
 
-  const handleConversationUpdate = () => {
-    if (currentConversation) {
-      const updated = getConversation(currentConversation.id);
-      if (updated) {
-        setCurrentConversation(updated);
-      }
+  const handleConversationUpdate = (conversationId?: string) => {
+    const targetId = conversationId ?? currentConversation?.id;
+    if (!targetId) return;
+    if (currentConversation && targetId !== currentConversation.id) return;
+
+    const updated = getConversation(targetId);
+    if (updated) {
+      setCurrentConversation(updated);
     }
   };
 

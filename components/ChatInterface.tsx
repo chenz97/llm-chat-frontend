@@ -24,7 +24,7 @@ import { Send, Image as ImageIcon, Loader2, Square, ArrowDown } from 'lucide-rea
 
 interface ChatInterfaceProps {
   conversation: Conversation | null;
-  onConversationUpdate: () => void;
+  onConversationUpdate: (conversationId?: string) => void;
 }
 
 export default function ChatInterface({
@@ -180,6 +180,7 @@ export default function ChatInterface({
 
     if (conversation) {
       updateConversationMessages(conversation.id, messagesRef.current);
+      onConversationUpdate(conversation.id);
       window.dispatchEvent(new Event('conversationsUpdated'));
     }
 
@@ -232,7 +233,7 @@ export default function ChatInterface({
     };
 
     saveConversation(pendingConversation);
-    onConversationUpdate();
+    onConversationUpdate(conversationId);
     window.dispatchEvent(new Event('conversationsUpdated'));
 
     const apiMessages = convertToOpenAIMessages(baseMessages);
@@ -349,7 +350,7 @@ export default function ChatInterface({
             };
 
             saveConversation(updatedConversation);
-            onConversationUpdate();
+            onConversationUpdate(conversationId);
             if (activeConversationIdRef.current === conversationId) {
               setMessages(finalMessages);
               setIsLoading(false);
@@ -479,7 +480,7 @@ export default function ChatInterface({
     };
 
     saveConversation(updatedConversation);
-    onConversationUpdate();
+    onConversationUpdate(conversation.id);
     window.dispatchEvent(new Event('conversationsUpdated'));
   };
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Conversation } from '@/types';
 import { getConversations, deleteConversation, setCurrentConversationId } from '@/lib/storage';
 import { MessageSquare, Trash2, Plus } from 'lucide-react';
@@ -19,10 +19,10 @@ export default function ConversationSidebar({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [mounted, setMounted] = useState(false);
 
-  const loadConversations = () => {
+  const loadConversations = useCallback(() => {
     const convs = getConversations().sort((a, b) => b.updatedAt - a.updatedAt);
     setConversations(convs);
-  };
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -37,6 +37,12 @@ export default function ConversationSidebar({
       window.removeEventListener('conversationsUpdated', handleStorageChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (mounted) {
+      loadConversations();
+    }
+  }, [currentConversationId, loadConversations, mounted]);
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
