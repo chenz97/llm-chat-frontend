@@ -28,8 +28,13 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCompactLayout, setIsCompactLayout] = useState(false);
+  const [isDraftConversation, setIsDraftConversation] = useState(false);
 
-  const createConversation = useCallback(async (apiConfigId: string, presetId?: string) => {
+  const createConversation = useCallback((
+    apiConfigId: string,
+    presetId?: string,
+    options?: { persist?: boolean }
+  ) => {
     const newConversation: Conversation = {
       id: generateId(),
       title: 'New Conversation',
@@ -40,13 +45,23 @@ export default function Home() {
       updatedAt: Date.now(),
     };
 
-    await saveConversation(newConversation);
-    await setCurrentConversationId(newConversation.id);
-    setCurrentConversation(newConversation);
-    setSelectedApiConfigId(apiConfigId);
-    setSelectedPresetId(presetId);
-    setIsSidebarOpen(false);
-    window.dispatchEvent(new Event('conversationsUpdated'));
+    const shouldPersist = options?.persist !== false;
+
+    const finalize = async () => {
+      if (shouldPersist) {
+        await saveConversation(newConversation);
+        await setCurrentConversationId(newConversation.id);
+        window.dispatchEvent(new Event('conversationsUpdated'));
+      }
+
+      setCurrentConversation(newConversation);
+      setSelectedApiConfigId(apiConfigId);
+      setSelectedPresetId(presetId);
+      setIsSidebarOpen(false);
+      setIsDraftConversation(!shouldPersist);
+    };
+
+    void finalize();
   }, []);
 
   useEffect(() => {
@@ -69,42 +84,53 @@ export default function Home() {
 
       if (cancelled) return;
 
-      if (storedConversation) {
-        await setCurrentConversationId(storedConversation.id);
-        setCurrentConversation(storedConversation);
-        setSelectedApiConfigId(storedConversation.apiConfigId);
-        setSelectedPresetId(storedConversation.assistantPresetId);
-        return;
-      }
+      let apiConfigIdToUse: string | undefined;
+      let presetToUse: string | undefined;
 
-      if (storedConversationId) {
+      if (storedConversation && getApiConfig(storedConversation.apiConfigId)) {
+        apiConfigIdToUse = storedConversation.apiConfigId;
+        if (storedConversation.assistantPresetId) {
+          const preset = getAssistantPreset(storedConversation.assistantPresetId);
+          if (preset) {
+            presetToUse = storedConversation.assistantPresetId;
+          }
+        }
+      } else if (storedConversationId) {
         await setCurrentConversationId(null);
       }
 
-      const existingConversations = await getConversations();
-      if (cancelled) return;
+      if (!apiConfigIdToUse) {
+        const existingConversations = await getConversations();
+        if (cancelled) return;
 
-      if (existingConversations.length > 0) {
-        const latestConversation = existingConversations.sort(
-          (a, b) => b.updatedAt - a.updatedAt
-        )[0];
-        await setCurrentConversationId(latestConversation.id);
-        setCurrentConversation(latestConversation);
-        setSelectedApiConfigId(latestConversation.apiConfigId);
-        setSelectedPresetId(latestConversation.assistantPresetId);
-        return;
+        if (existingConversations.length > 0) {
+          const latestConversation = existingConversations.sort(
+            (a, b) => b.updatedAt - a.updatedAt
+          )[0];
+          if (getApiConfig(latestConversation.apiConfigId)) {
+            apiConfigIdToUse = latestConversation.apiConfigId;
+          }
+          if (latestConversation.assistantPresetId) {
+            const preset = getAssistantPreset(latestConversation.assistantPresetId);
+            if (preset) {
+              presetToUse = latestConversation.assistantPresetId;
+            }
+          }
+        }
       }
 
-      const defaultPresetId = getDefaultPresetId();
-      const defaultPreset = defaultPresetId ? getAssistantPreset(defaultPresetId) : undefined;
-      const presetProviderId = defaultPreset?.apiConfigId && getApiConfig(defaultPreset.apiConfigId)
-        ? defaultPreset.apiConfigId
-        : undefined;
-      const apiConfigIdToUse = presetProviderId || configs[0].id;
-      const presetToUse = defaultPresetId || undefined;
+      if (!apiConfigIdToUse) {
+        const defaultPresetId = getDefaultPresetId();
+        const defaultPreset = defaultPresetId ? getAssistantPreset(defaultPresetId) : undefined;
+        const presetProviderId = defaultPreset?.apiConfigId && getApiConfig(defaultPreset.apiConfigId)
+          ? defaultPreset.apiConfigId
+          : undefined;
+        apiConfigIdToUse = presetProviderId || configs[0].id;
+        presetToUse = defaultPresetId || undefined;
+      }
 
       if (!cancelled) {
-        await createConversation(apiConfigIdToUse, presetToUse);
+        createConversation(apiConfigIdToUse, presetToUse, { persist: false });
       }
     };
 
@@ -174,7 +200,7 @@ export default function Home() {
       return;
     }
 
-    void createConversation(apiConfigIdToUse, presetToUse);
+    createConversation(apiConfigIdToUse, presetToUse, { persist: false });
   };
 
   const handleSelectConversation = (id: string | null) => {
@@ -182,6 +208,7 @@ export default function Home() {
       if (!id) {
         await setCurrentConversationId(null);
         setCurrentConversation(null);
+        setIsDraftConversation(false);
         return;
       }
 
@@ -192,6 +219,7 @@ export default function Home() {
         setSelectedApiConfigId(conv.apiConfigId);
         setSelectedPresetId(conv.assistantPresetId);
         setIsSidebarOpen(false);
+        setIsDraftConversation(false);
       }
     };
     void selectConversation();
@@ -204,7 +232,13 @@ export default function Home() {
 
     const updated = await getConversation(targetId);
     if (updated) {
+      if (isDraftConversation) {
+        await setCurrentConversationId(updated.id);
+        setIsDraftConversation(false);
+      }
       setCurrentConversation(updated);
+      setSelectedApiConfigId(updated.apiConfigId);
+      setSelectedPresetId(updated.assistantPresetId);
     }
   };
 
@@ -216,8 +250,10 @@ export default function Home() {
         ...currentConversation,
         apiConfigId: id,
       };
-      void saveConversation(updated);
       setCurrentConversation(updated);
+      if (!isDraftConversation) {
+        void saveConversation(updated);
+      }
     }
   };
 
@@ -241,8 +277,10 @@ export default function Home() {
         assistantPresetId: id,
         apiConfigId: nextApiConfigId,
       };
-      void saveConversation(updated);
       setCurrentConversation(updated);
+      if (!isDraftConversation) {
+        void saveConversation(updated);
+      }
     }
   };
 
