@@ -21,13 +21,15 @@ function getFromStorage<T>(key: string, defaultValue: T): T {
   }
 }
 
-function saveToStorage<T>(key: string, value: T): void {
-  if (typeof window === 'undefined') return;
+function saveToStorage<T>(key: string, value: T): boolean {
+  if (typeof window === 'undefined') return false;
 
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch (error) {
     console.error(`Error saving to localStorage (${key}):`, error);
+    return false;
   }
 }
 
@@ -112,7 +114,41 @@ export function getConversations(): Conversation[] {
   return getFromStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, []);
 }
 
-export function saveConversation(conversation: Conversation): void {
+function saveConversationsWithFallback(
+  conversations: Conversation[],
+  preserveId?: string
+): boolean {
+  if (saveToStorage(STORAGE_KEYS.CONVERSATIONS, conversations)) {
+    return true;
+  }
+
+  let working = [...conversations];
+  const prunable = working
+    .filter(c => c.id !== preserveId)
+    .sort((a, b) => a.updatedAt - b.updatedAt);
+
+  for (const conv of prunable) {
+    working = working.filter(c => c.id !== conv.id);
+    if (saveToStorage(STORAGE_KEYS.CONVERSATIONS, working)) {
+      console.warn('Storage quota exceeded; removed an older conversation to free space.');
+      return true;
+    }
+  }
+
+  if (preserveId) {
+    const preserved = conversations.find(c => c.id === preserveId);
+    const fallback = preserved ? [preserved] : [];
+    if (saveToStorage(STORAGE_KEYS.CONVERSATIONS, fallback)) {
+      console.warn('Storage quota exceeded; kept only the active conversation.');
+      return true;
+    }
+  }
+
+  console.error('Failed to save conversations: localStorage quota exceeded.');
+  return false;
+}
+
+export function saveConversation(conversation: Conversation): boolean {
   const conversations = getConversations();
   const index = conversations.findIndex(c => c.id === conversation.id);
 
@@ -124,24 +160,24 @@ export function saveConversation(conversation: Conversation): void {
     conversations.push(conversation);
   }
 
-  saveToStorage(STORAGE_KEYS.CONVERSATIONS, conversations);
+  return saveConversationsWithFallback(conversations, conversation.id);
 }
 
 export function updateConversationMessages(
   conversationId: string,
   messages: ChatMessage[]
-): void {
+): boolean {
   const conversations = getConversations();
   const index = conversations.findIndex(c => c.id === conversationId);
 
-  if (index < 0) return;
+  if (index < 0) return false;
 
   conversations[index] = {
     ...conversations[index],
     messages,
   };
 
-  saveToStorage(STORAGE_KEYS.CONVERSATIONS, conversations);
+  return saveConversationsWithFallback(conversations, conversationId);
 }
 
 export function deleteConversation(id: string): void {

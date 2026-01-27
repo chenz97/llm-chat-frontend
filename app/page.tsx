@@ -4,9 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { Conversation } from '@/types';
 import {
   getConversation,
+  getConversations,
   saveConversation,
   generateId,
   setCurrentConversationId,
+  getCurrentConversationId,
   getApiConfigs,
   getDefaultPresetId,
   getAssistantPreset,
@@ -53,6 +55,35 @@ export default function Home() {
     const configs = getApiConfigs();
     if (configs.length === 0) {
       setIsSettingsOpen(true);
+      return;
+    }
+
+    const storedConversationId = getCurrentConversationId();
+    const storedConversation = storedConversationId
+      ? getConversation(storedConversationId)
+      : undefined;
+
+    if (storedConversation) {
+      setCurrentConversationId(storedConversation.id);
+      setCurrentConversation(storedConversation);
+      setSelectedApiConfigId(storedConversation.apiConfigId);
+      setSelectedPresetId(storedConversation.assistantPresetId);
+      return;
+    }
+
+    if (storedConversationId) {
+      setCurrentConversationId(null);
+    }
+
+    const existingConversations = getConversations();
+    if (existingConversations.length > 0) {
+      const latestConversation = existingConversations.sort(
+        (a, b) => b.updatedAt - a.updatedAt
+      )[0];
+      setCurrentConversationId(latestConversation.id);
+      setCurrentConversation(latestConversation);
+      setSelectedApiConfigId(latestConversation.apiConfigId);
+      setSelectedPresetId(latestConversation.assistantPresetId);
       return;
     }
 

@@ -179,8 +179,10 @@ export default function ChatInterface({
     clearPersistTimer();
 
     if (conversation) {
-      updateConversationMessages(conversation.id, messagesRef.current);
-      onConversationUpdate(conversation.id);
+      const didSave = updateConversationMessages(conversation.id, messagesRef.current);
+      if (didSave) {
+        onConversationUpdate(conversation.id);
+      }
       window.dispatchEvent(new Event('conversationsUpdated'));
     }
 
@@ -232,8 +234,10 @@ export default function ChatInterface({
       updatedAt: Date.now(),
     };
 
-    saveConversation(pendingConversation);
-    onConversationUpdate(conversationId);
+    const didSavePending = saveConversation(pendingConversation);
+    if (didSavePending) {
+      onConversationUpdate(conversationId);
+    }
     window.dispatchEvent(new Event('conversationsUpdated'));
 
     const apiMessages = convertToOpenAIMessages(baseMessages);
@@ -349,8 +353,10 @@ export default function ChatInterface({
               updatedAt: Date.now(),
             };
 
-            saveConversation(updatedConversation);
-            onConversationUpdate(conversationId);
+            const didSaveFinal = saveConversation(updatedConversation);
+            if (didSaveFinal) {
+              onConversationUpdate(conversationId);
+            }
             if (activeConversationIdRef.current === conversationId) {
               setMessages(finalMessages);
               setIsLoading(false);
@@ -479,8 +485,10 @@ export default function ChatInterface({
       updatedAt: Date.now(),
     };
 
-    saveConversation(updatedConversation);
-    onConversationUpdate(conversation.id);
+    const didSaveEdit = saveConversation(updatedConversation);
+    if (didSaveEdit) {
+      onConversationUpdate(conversation.id);
+    }
     window.dispatchEvent(new Event('conversationsUpdated'));
   };
 
