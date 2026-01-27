@@ -27,12 +27,17 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
   const promptTokens = message.usage?.prompt_tokens;
   const reasoningTokens = message.usage?.reasoning_tokens;
   const completionTokens = message.usage?.completion_tokens;
+  const latencySeconds = message.firstTokenTimestamp !== undefined
+    && message.firstTokenTimestamp >= message.timestamp
+    ? (message.firstTokenTimestamp - message.timestamp) / 1000
+    : undefined;
   const showUsage = !isUser
     && !isSystem
     && (
       promptTokens !== undefined
       || reasoningTokens !== undefined
       || completionTokens !== undefined
+      || latencySeconds !== undefined
     );
 
   const copyWithFallback = async (text: string) => {
@@ -219,6 +224,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
               {showUsage && (
                 <div className="mt-2 text-xs text-slate-400 text-right">
                   prompt {promptTokens ?? '-'} | reasoning {reasoningTokens ?? '-'} | completion {completionTokens ?? '-'}
+                  {latencySeconds !== undefined ? ` | latency ${latencySeconds.toFixed(1)}s` : ''}
                 </div>
               )}
             </div>

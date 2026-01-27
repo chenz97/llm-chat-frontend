@@ -214,6 +214,7 @@ export default function ChatInterface({
     };
 
     let streamMessages = [...baseMessages, assistantMessage];
+    let firstTokenTimestamp: number | null = null;
 
     setIsLoading(true);
     streamingConversationIdRef.current = conversationId;
@@ -266,9 +267,16 @@ export default function ChatInterface({
         {
           onMessage: (chunk) => {
             accumulatedContent += chunk;
+            if (firstTokenTimestamp === null && chunk.length > 0) {
+              firstTokenTimestamp = Date.now();
+            }
             streamMessages = streamMessages.map((msg) =>
               msg.id === assistantMessageId
-                ? { ...msg, content: accumulatedContent }
+                ? {
+                  ...msg,
+                  content: accumulatedContent,
+                  ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
+                }
                 : msg
             );
 
@@ -325,7 +333,12 @@ export default function ChatInterface({
           onComplete: () => {
             const finalMessages = [
               ...baseMessages,
-              { ...assistantMessage, content: accumulatedContent, usage: latestUsage || undefined },
+              {
+                ...assistantMessage,
+                content: accumulatedContent,
+                usage: latestUsage || undefined,
+                ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
+              },
             ];
 
             const updatedConversation: Conversation = {

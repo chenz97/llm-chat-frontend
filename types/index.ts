@@ -61,6 +61,7 @@ export interface ChatMessage {
   imageUrl?: string; // For user uploaded images
   usage?: TokenUsage;
   timestamp: number;
+  firstTokenTimestamp?: number;
 }
 
 export interface Conversation {
