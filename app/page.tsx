@@ -4,10 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Conversation } from '@/types';
 import {
   getConversation,
-  getConversations,
   saveConversation,
   generateId,
-  getCurrentConversationId,
   setCurrentConversationId,
   getApiConfigs,
   getDefaultPresetId,
@@ -55,30 +53,6 @@ export default function Home() {
     const configs = getApiConfigs();
     if (configs.length === 0) {
       setIsSettingsOpen(true);
-      return;
-    }
-
-    const storedConversationId = getCurrentConversationId();
-    const storedConversation = storedConversationId
-      ? getConversation(storedConversationId)
-      : undefined;
-    if (storedConversation) {
-      setCurrentConversation(storedConversation);
-      setSelectedApiConfigId(storedConversation.apiConfigId);
-      setSelectedPresetId(storedConversation.assistantPresetId);
-      return;
-    }
-
-    const existingConversations = getConversations();
-    if (existingConversations.length > 0) {
-      const latestConversation = existingConversations
-        .slice()
-        .sort((a, b) => b.updatedAt - a.updatedAt)[0];
-
-      setCurrentConversationId(latestConversation.id);
-      setCurrentConversation(latestConversation);
-      setSelectedApiConfigId(latestConversation.apiConfigId);
-      setSelectedPresetId(latestConversation.assistantPresetId);
       return;
     }
 

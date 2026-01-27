@@ -38,11 +38,6 @@ export default function ConversationSidebar({
     };
   }, []);
 
-  useEffect(() => {
-    if (!mounted) return;
-    loadConversations();
-  }, [currentConversationId, mounted]);
-
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
 
