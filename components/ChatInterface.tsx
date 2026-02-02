@@ -225,9 +225,9 @@ export default function ChatInterface({
   const startAssistantResponse = async (baseMessages: ChatMessage[], titleSeed?: string) => {
     if (!conversation) return;
 
-    let resolvedApiConfig = apiConfig;
+    let resolvedApiConfig: ApiConfig | null = apiConfig;
     if (!resolvedApiConfig || resolvedApiConfig.id !== conversation.apiConfigId) {
-      resolvedApiConfig = await getApiConfig(conversation.apiConfigId);
+      resolvedApiConfig = (await getApiConfig(conversation.apiConfigId)) || null;
     }
     if (!resolvedApiConfig) return;
     if (!apiConfig || apiConfig.id !== resolvedApiConfig.id) {
