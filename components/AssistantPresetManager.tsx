@@ -10,6 +10,8 @@ import {
   getApiConfigs,
   getDefaultPresetId,
   setDefaultPresetId,
+  hasAssistantPresetsMigrationNotice,
+  clearAssistantPresetsMigrationNotice,
 } from '@/lib/storage';
 import { Plus, Trash2, Edit2, Check, X, Star } from 'lucide-react';
 
@@ -21,18 +23,62 @@ export default function AssistantPresetManager() {
   const [apiConfigs, setApiConfigs] = useState<ApiConfig[]>([]);
   const [mounted, setMounted] = useState(false);
   const [defaultPresetId, setDefaultPresetIdState] = useState<string | null>(null);
+  const [migrationNotice, setMigrationNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setMounted(true);
-    setPresets(getAssistantPresets());
-    setDefaultPresetIdState(getDefaultPresetId());
 
-    // Get all available models from API configs
-    const configs = getApiConfigs();
-    setApiConfigs(configs);
-    const models = configs.flatMap(c => c.models);
-    setAvailableModels([...new Set(models)]);
+    const initialize = async () => {
+      const loadedPresets = await getAssistantPresets();
+      if (!cancelled) {
+        setPresets(loadedPresets);
+        setDefaultPresetIdState(getDefaultPresetId());
+      }
+
+      // Get all available models from API configs
+      const configs = getApiConfigs();
+      if (!cancelled) {
+        setApiConfigs(configs);
+        const models = configs.flatMap(c => c.models);
+        setAvailableModels([...new Set(models)]);
+      }
+    };
+
+    void initialize();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    const showNotice = () => {
+      setMigrationNotice('Assistant presets were migrated to the local database for more reliable saving.');
+      clearAssistantPresetsMigrationNotice();
+    };
+
+    if (hasAssistantPresetsMigrationNotice()) {
+      showNotice();
+    }
+
+    const handleMigration = () => {
+      showNotice();
+    };
+
+    window.addEventListener('assistantPresetsMigrated', handleMigration);
+    return () => {
+      window.removeEventListener('assistantPresetsMigrated', handleMigration);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!migrationNotice) return;
+    const timer = window.setTimeout(() => {
+      setMigrationNotice(null);
+    }, 7000);
+    return () => window.clearTimeout(timer);
+  }, [migrationNotice]);
 
   if (!mounted) {
     return null;
@@ -79,7 +125,7 @@ export default function AssistantPresetManager() {
     setFormData(newPreset);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.id) return;
 
     const preset: AssistantPreset = {
@@ -92,8 +138,13 @@ export default function AssistantPresetManager() {
       createdAt: formData.createdAt || Date.now(),
     };
 
-    saveAssistantPreset(preset);
-    setPresets(getAssistantPresets());
+    const didSave = await saveAssistantPreset(preset);
+    if (!didSave) {
+      alert('Failed to save assistant preset. Your browser storage may be full.');
+      return;
+    }
+
+    setPresets(await getAssistantPresets());
     setEditing(null);
     setFormData({});
     window.dispatchEvent(new Event('settingsUpdated'));
@@ -104,10 +155,15 @@ export default function AssistantPresetManager() {
     setFormData(preset);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this assistant preset?')) {
-      deleteAssistantPreset(id);
-      setPresets(getAssistantPresets());
+      const didDelete = await deleteAssistantPreset(id);
+      if (!didDelete) {
+        alert('Failed to delete assistant preset. Please try again.');
+        return;
+      }
+
+      setPresets(await getAssistantPresets());
       setDefaultPresetIdState(getDefaultPresetId());
       window.dispatchEvent(new Event('settingsUpdated'));
     }
@@ -160,6 +216,18 @@ export default function AssistantPresetManager() {
 
   return (
     <div className="space-y-3">
+      {migrationNotice && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 flex items-start justify-between gap-3">
+          <span>{migrationNotice}</span>
+          <button
+            type="button"
+            onClick={() => setMigrationNotice(null)}
+            className="text-emerald-700 hover:text-emerald-900 font-medium"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-slate-900">Assistant Presets</h2>
         <button

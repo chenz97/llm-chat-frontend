@@ -76,11 +76,11 @@ const sanitizeAssistantPresets = (rawPresets: unknown): AssistantPreset[] => {
   return sanitized;
 };
 
-const buildExportData = (): SettingsExport => ({
+const buildExportData = async (): Promise<SettingsExport> => ({
   version: 1,
   exportedAt: Date.now(),
   apiConfigs: getApiConfigs(),
-  assistantPresets: getAssistantPresets(),
+  assistantPresets: await getAssistantPresets(),
   defaultPresetId: getDefaultPresetId(),
 });
 
@@ -149,13 +149,21 @@ export default function SettingsTransfer() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<StatusMessage | null>(null);
 
-  const handleExport = () => {
-    const data = buildExportData();
-    downloadSettings(data);
-    setStatus({
-      kind: 'success',
-      message: 'Settings exported successfully.',
-    });
+  const handleExport = async () => {
+    try {
+      const data = await buildExportData();
+      downloadSettings(data);
+      setStatus({
+        kind: 'success',
+        message: 'Settings exported successfully.',
+      });
+    } catch (error) {
+      console.error('Failed to export settings:', error);
+      setStatus({
+        kind: 'error',
+        message: 'Failed to export settings. Please try again.',
+      });
+    }
   };
 
   const handleImportClick = () => {
@@ -178,7 +186,10 @@ export default function SettingsTransfer() {
       const normalized = normalizeImportData(parsed);
 
       setApiConfigs(normalized.apiConfigs);
-      setAssistantPresets(normalized.assistantPresets);
+      const didSavePresets = await setAssistantPresets(normalized.assistantPresets);
+      if (!didSavePresets) {
+        throw new Error('Failed to save assistant presets.');
+      }
       setDefaultPresetId(normalized.defaultPresetId);
       window.dispatchEvent(new Event(SETTINGS_UPDATED_EVENT));
 

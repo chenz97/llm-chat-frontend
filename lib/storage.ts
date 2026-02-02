@@ -3,16 +3,18 @@ import { ApiConfig, AssistantPreset, Conversation, ChatMessage } from '@/types';
 const STORAGE_KEYS = {
   API_CONFIGS: 'llm_chat_api_configs',
   ASSISTANT_PRESETS: 'llm_chat_assistant_presets',
+  ASSISTANT_PRESETS_MIGRATION_NOTICE: 'llm_chat_assistant_presets_migration_notice',
   DEFAULT_PRESET_ID: 'llm_chat_default_preset_id',
 } as const;
 
 const DB_CONFIG = {
   NAME: 'llm_chat_db',
-  VERSION: 1,
+  VERSION: 2,
 } as const;
 
 const DB_STORES = {
   CONVERSATIONS: 'conversations',
+  ASSISTANT_PRESETS: 'assistant_presets',
   META: 'meta',
 } as const;
 
@@ -21,6 +23,7 @@ const META_KEYS = {
 } as const;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
+let didNotifyAssistantPresetsMigration = false;
 
 // Generic storage helpers
 function getFromStorage<T>(key: string, defaultValue: T): T {
@@ -81,6 +84,9 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(DB_STORES.CONVERSATIONS)) {
         db.createObjectStore(DB_STORES.CONVERSATIONS, { keyPath: 'id' });
       }
+      if (!db.objectStoreNames.contains(DB_STORES.ASSISTANT_PRESETS)) {
+        db.createObjectStore(DB_STORES.ASSISTANT_PRESETS, { keyPath: 'id' });
+      }
       if (!db.objectStoreNames.contains(DB_STORES.META)) {
         db.createObjectStore(DB_STORES.META, { keyPath: 'key' });
       }
@@ -125,39 +131,222 @@ export function getApiConfig(id: string): ApiConfig | undefined {
 }
 
 // Assistant Presets
-export function getAssistantPresets(): AssistantPreset[] {
-  return getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, []);
+function clearAssistantPresetsStorage(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEYS.ASSISTANT_PRESETS);
+  } catch (error) {
+    console.error(`Error clearing localStorage (${STORAGE_KEYS.ASSISTANT_PRESETS}):`, error);
+  }
 }
 
-export function setAssistantPresets(presets: AssistantPreset[]): void {
-  saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
-}
+function markAssistantPresetsMigrated(): void {
+  if (typeof window === 'undefined') return;
 
-export function saveAssistantPreset(preset: AssistantPreset): void {
-  const presets = getAssistantPresets();
-  const index = presets.findIndex(p => p.id === preset.id);
-
-  if (index >= 0) {
-    presets[index] = preset;
-  } else {
-    presets.push(preset);
+  try {
+    localStorage.setItem(STORAGE_KEYS.ASSISTANT_PRESETS_MIGRATION_NOTICE, '1');
+  } catch (error) {
+    console.error('Error saving assistant preset migration notice:', error);
   }
 
-  saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
+  if (!didNotifyAssistantPresetsMigration) {
+    didNotifyAssistantPresetsMigration = true;
+    window.dispatchEvent(new Event('assistantPresetsMigrated'));
+  }
 }
 
-export function deleteAssistantPreset(id: string): void {
-  const presets = getAssistantPresets().filter(p => p.id !== id);
-  saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
+async function migrateAssistantPresetsToStore(store: IDBObjectStore): Promise<boolean> {
+  const fallback = getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, []);
+  if (fallback.length === 0) return false;
+
+  const count = await requestToPromise(store.count());
+  if (count > 0) return false;
+
+  fallback.forEach((preset) => {
+    store.put(preset);
+  });
+
+  return true;
+}
+
+export async function getAssistantPresets(): Promise<AssistantPreset[]> {
+  const fallback = getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, []);
+
+  if (!isIndexedDbAvailable()) return fallback;
+
+  try {
+    const db = await openDb();
+    const tx = db.transaction(DB_STORES.ASSISTANT_PRESETS, 'readonly');
+    const store = tx.objectStore(DB_STORES.ASSISTANT_PRESETS);
+    const result = await requestToPromise(store.getAll());
+    await transactionComplete(tx);
+    const presets = Array.isArray(result) ? result : [];
+
+    if (presets.length > 0) {
+      return presets;
+    }
+
+    if (fallback.length > 0) {
+      const migrated = await setAssistantPresets(fallback);
+      if (migrated) {
+        markAssistantPresetsMigrated();
+      }
+    }
+
+    return fallback;
+  } catch (error) {
+    console.error('Error loading assistant presets from IndexedDB:', error);
+    return fallback;
+  }
+}
+
+export async function setAssistantPresets(presets: AssistantPreset[]): Promise<boolean> {
+  if (!isIndexedDbAvailable()) {
+    return saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
+  }
+
+  try {
+    const db = await openDb();
+    const tx = db.transaction(DB_STORES.ASSISTANT_PRESETS, 'readwrite');
+    const store = tx.objectStore(DB_STORES.ASSISTANT_PRESETS);
+
+    store.clear();
+    presets.forEach((preset) => {
+      store.put(preset);
+    });
+
+    await transactionComplete(tx);
+    clearAssistantPresetsStorage();
+    return true;
+  } catch (error) {
+    console.error('Error saving assistant presets to IndexedDB:', error);
+    return saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
+  }
+}
+
+export async function saveAssistantPreset(preset: AssistantPreset): Promise<boolean> {
+  if (!isIndexedDbAvailable()) {
+    const presets = getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, []);
+    const index = presets.findIndex(p => p.id === preset.id);
+
+    if (index >= 0) {
+      presets[index] = preset;
+    } else {
+      presets.push(preset);
+    }
+
+    return saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
+  }
+
+  try {
+    const db = await openDb();
+    const tx = db.transaction(DB_STORES.ASSISTANT_PRESETS, 'readwrite');
+    const store = tx.objectStore(DB_STORES.ASSISTANT_PRESETS);
+    const didMigrate = await migrateAssistantPresetsToStore(store);
+    store.put(preset);
+    await transactionComplete(tx);
+    clearAssistantPresetsStorage();
+    if (didMigrate) {
+      markAssistantPresetsMigrated();
+    }
+    return true;
+  } catch (error) {
+    console.error('Error saving assistant preset to IndexedDB:', error);
+    const presets = getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, []);
+    const index = presets.findIndex(p => p.id === preset.id);
+
+    if (index >= 0) {
+      presets[index] = preset;
+    } else {
+      presets.push(preset);
+    }
+
+    return saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
+  }
+}
+
+export async function deleteAssistantPreset(id: string): Promise<boolean> {
+  let removed = false;
+
+  if (!isIndexedDbAvailable()) {
+    const presets = getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, [])
+      .filter(p => p.id !== id);
+    removed = saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
+  } else {
+    try {
+      const db = await openDb();
+      const tx = db.transaction(DB_STORES.ASSISTANT_PRESETS, 'readwrite');
+      const store = tx.objectStore(DB_STORES.ASSISTANT_PRESETS);
+      const didMigrate = await migrateAssistantPresetsToStore(store);
+      store.delete(id);
+      await transactionComplete(tx);
+      clearAssistantPresetsStorage();
+      if (didMigrate) {
+        markAssistantPresetsMigrated();
+      }
+      removed = true;
+    } catch (error) {
+      console.error('Error deleting assistant preset from IndexedDB:', error);
+      const presets = getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, [])
+        .filter(p => p.id !== id);
+      removed = saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
+    }
+  }
 
   // Clear default if deleting default preset
-  if (getDefaultPresetId() === id) {
+  if (removed && getDefaultPresetId() === id) {
     setDefaultPresetId(null);
+  }
+
+  return removed;
+}
+
+export async function getAssistantPreset(id: string): Promise<AssistantPreset | undefined> {
+  if (!isIndexedDbAvailable()) {
+    return getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, [])
+      .find(p => p.id === id);
+  }
+
+  try {
+    const db = await openDb();
+    const tx = db.transaction(DB_STORES.ASSISTANT_PRESETS, 'readonly');
+    const store = tx.objectStore(DB_STORES.ASSISTANT_PRESETS);
+    const result = await requestToPromise<AssistantPreset | undefined>(store.get(id));
+    await transactionComplete(tx);
+    if (result) return result;
+
+    const fallback = getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, []);
+    if (fallback.length > 0) {
+      const migrated = await setAssistantPresets(fallback);
+      if (migrated) {
+        markAssistantPresetsMigrated();
+      }
+    }
+    return fallback.find(p => p.id === id);
+  } catch (error) {
+    console.error('Error loading assistant preset from IndexedDB:', error);
+    return getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, [])
+      .find(p => p.id === id);
   }
 }
 
-export function getAssistantPreset(id: string): AssistantPreset | undefined {
-  return getAssistantPresets().find(p => p.id === id);
+export function hasAssistantPresetsMigrationNotice(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(STORAGE_KEYS.ASSISTANT_PRESETS_MIGRATION_NOTICE) === '1';
+  } catch (error) {
+    console.error('Error reading assistant preset migration notice:', error);
+    return false;
+  }
+}
+
+export function clearAssistantPresetsMigrationNotice(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEYS.ASSISTANT_PRESETS_MIGRATION_NOTICE);
+  } catch (error) {
+    console.error('Error clearing assistant preset migration notice:', error);
+  }
 }
 
 // Default Preset

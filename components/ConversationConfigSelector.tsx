@@ -25,15 +25,32 @@ export default function ConversationConfigSelector({
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     setMounted(true);
-    setApiConfigs(getApiConfigs());
-    setPresets(getAssistantPresets());
+
+    const loadSettings = async () => {
+      const presetsData = await getAssistantPresets();
+      if (!cancelled) {
+        setApiConfigs(getApiConfigs());
+        setPresets(presetsData);
+      }
+    };
+
+    void loadSettings();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     const handleSettingsUpdate = () => {
-      setApiConfigs(getApiConfigs());
-      setPresets(getAssistantPresets());
+      const refresh = async () => {
+        const presetsData = await getAssistantPresets();
+        setApiConfigs(getApiConfigs());
+        setPresets(presetsData);
+      };
+      void refresh();
     };
 
     window.addEventListener('settingsUpdated', handleSettingsUpdate);

@@ -90,7 +90,7 @@ export default function Home() {
       if (storedConversation && getApiConfig(storedConversation.apiConfigId)) {
         apiConfigIdToUse = storedConversation.apiConfigId;
         if (storedConversation.assistantPresetId) {
-          const preset = getAssistantPreset(storedConversation.assistantPresetId);
+          const preset = await getAssistantPreset(storedConversation.assistantPresetId);
           if (preset) {
             presetToUse = storedConversation.assistantPresetId;
           }
@@ -111,7 +111,7 @@ export default function Home() {
             apiConfigIdToUse = latestConversation.apiConfigId;
           }
           if (latestConversation.assistantPresetId) {
-            const preset = getAssistantPreset(latestConversation.assistantPresetId);
+            const preset = await getAssistantPreset(latestConversation.assistantPresetId);
             if (preset) {
               presetToUse = latestConversation.assistantPresetId;
             }
@@ -121,7 +121,7 @@ export default function Home() {
 
       if (!apiConfigIdToUse) {
         const defaultPresetId = getDefaultPresetId();
-        const defaultPreset = defaultPresetId ? getAssistantPreset(defaultPresetId) : undefined;
+        const defaultPreset = defaultPresetId ? await getAssistantPreset(defaultPresetId) : undefined;
         const presetProviderId = defaultPreset?.apiConfigId && getApiConfig(defaultPreset.apiConfigId)
           ? defaultPreset.apiConfigId
           : undefined;
@@ -258,30 +258,34 @@ export default function Home() {
   };
 
   const handlePresetChange = (id: string | undefined) => {
-    const preset = id ? getAssistantPreset(id) : undefined;
-    const presetProviderId = preset?.apiConfigId && getApiConfig(preset.apiConfigId)
-      ? preset.apiConfigId
-      : undefined;
-    const currentApiConfigId = currentConversation?.apiConfigId || selectedApiConfigId;
-    const nextApiConfigId = presetProviderId || currentApiConfigId;
+    const updatePreset = async () => {
+      const preset = id ? await getAssistantPreset(id) : undefined;
+      const presetProviderId = preset?.apiConfigId && getApiConfig(preset.apiConfigId)
+        ? preset.apiConfigId
+        : undefined;
+      const currentApiConfigId = currentConversation?.apiConfigId || selectedApiConfigId;
+      const nextApiConfigId = presetProviderId || currentApiConfigId;
 
-    setSelectedPresetId(id);
+      setSelectedPresetId(id);
 
-    if (presetProviderId) {
-      setSelectedApiConfigId(presetProviderId);
-    }
-
-    if (currentConversation) {
-      const updated = {
-        ...currentConversation,
-        assistantPresetId: id,
-        apiConfigId: nextApiConfigId,
-      };
-      setCurrentConversation(updated);
-      if (!isDraftConversation) {
-        void saveConversation(updated);
+      if (presetProviderId) {
+        setSelectedApiConfigId(presetProviderId);
       }
-    }
+
+      if (currentConversation) {
+        const updated = {
+          ...currentConversation,
+          assistantPresetId: id,
+          apiConfigId: nextApiConfigId,
+        };
+        setCurrentConversation(updated);
+        if (!isDraftConversation) {
+          void saveConversation(updated);
+        }
+      }
+    };
+
+    void updatePreset();
   };
 
   const handleSettingsClose = () => {

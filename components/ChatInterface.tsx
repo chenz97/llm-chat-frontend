@@ -56,6 +56,8 @@ export default function ChatInterface({
   }, [messages]);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (conversation) {
       setMessages(conversation.messages);
 
@@ -63,8 +65,14 @@ export default function ChatInterface({
       setApiConfig(config || null);
 
       if (conversation.assistantPresetId) {
-        const preset = getAssistantPreset(conversation.assistantPresetId);
-        setAssistantPreset(preset || null);
+        const presetId = conversation.assistantPresetId;
+        const loadPreset = async () => {
+          const preset = await getAssistantPreset(presetId);
+          if (!cancelled) {
+            setAssistantPreset(preset || null);
+          }
+        };
+        void loadPreset();
       } else {
         setAssistantPreset(null);
       }
@@ -80,7 +88,9 @@ export default function ChatInterface({
     if (!conversation) {
       setIsLoading(false);
       previousConversationIdRef.current = null;
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (conversationId !== previousConversationIdRef.current) {
@@ -97,6 +107,9 @@ export default function ChatInterface({
     } else {
       setIsLoading(false);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [conversation]);
 
   useEffect(() => {
@@ -242,12 +255,25 @@ export default function ChatInterface({
     }
     window.dispatchEvent(new Event('conversationsUpdated'));
 
+    let resolvedPreset = assistantPreset;
+    if (conversation.assistantPresetId) {
+      if (!resolvedPreset || resolvedPreset.id !== conversation.assistantPresetId) {
+        resolvedPreset = await getAssistantPreset(conversation.assistantPresetId);
+      }
+    } else {
+      resolvedPreset = null;
+    }
+
+    if (resolvedPreset && (!assistantPreset || assistantPreset.id !== resolvedPreset.id)) {
+      setAssistantPreset(resolvedPreset);
+    }
+
     const apiMessages = convertToOpenAIMessages(baseMessages);
 
-    if (assistantPreset?.systemPrompt) {
+    if (resolvedPreset?.systemPrompt) {
       apiMessages.unshift({
         role: 'system',
-        content: assistantPreset.systemPrompt,
+        content: resolvedPreset.systemPrompt,
       });
     }
 
@@ -255,9 +281,9 @@ export default function ChatInterface({
     let latestUsage: TokenUsage | null = null;
 
     const request: ChatCompletionRequest = {
-      model: assistantPreset?.modelId || apiConfig.models[0] || 'gpt-3.5-turbo',
+      model: resolvedPreset?.modelId || apiConfig.models[0] || 'gpt-3.5-turbo',
       messages: apiMessages,
-      ...(assistantPreset?.parameters || {}),
+      ...(resolvedPreset?.parameters || {}),
     };
 
     const streamOptions = request.stream_options;
