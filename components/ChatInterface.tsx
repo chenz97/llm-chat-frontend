@@ -255,10 +255,10 @@ export default function ChatInterface({
     }
     window.dispatchEvent(new Event('conversationsUpdated'));
 
-    let resolvedPreset = assistantPreset;
+    let resolvedPreset: AssistantPreset | null = assistantPreset;
     if (conversation.assistantPresetId) {
       if (!resolvedPreset || resolvedPreset.id !== conversation.assistantPresetId) {
-        resolvedPreset = await getAssistantPreset(conversation.assistantPresetId);
+        resolvedPreset = (await getAssistantPreset(conversation.assistantPresetId)) || null;
       }
     } else {
       resolvedPreset = null;
