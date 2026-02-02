@@ -30,8 +30,9 @@ export default function ConversationConfigSelector({
 
     const loadSettings = async () => {
       const presetsData = await getAssistantPresets();
+      const configsData = await getApiConfigs();
       if (!cancelled) {
-        setApiConfigs(getApiConfigs());
+        setApiConfigs(configsData);
         setPresets(presetsData);
       }
     };
@@ -47,7 +48,8 @@ export default function ConversationConfigSelector({
     const handleSettingsUpdate = () => {
       const refresh = async () => {
         const presetsData = await getAssistantPresets();
-        setApiConfigs(getApiConfigs());
+        const configsData = await getApiConfigs();
+        setApiConfigs(configsData);
         setPresets(presetsData);
       };
       void refresh();

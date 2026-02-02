@@ -79,9 +79,9 @@ const sanitizeAssistantPresets = (rawPresets: unknown): AssistantPreset[] => {
 const buildExportData = async (): Promise<SettingsExport> => ({
   version: 1,
   exportedAt: Date.now(),
-  apiConfigs: getApiConfigs(),
+  apiConfigs: await getApiConfigs(),
   assistantPresets: await getAssistantPresets(),
-  defaultPresetId: getDefaultPresetId(),
+  defaultPresetId: await getDefaultPresetId(),
 });
 
 const normalizeImportData = (raw: unknown) => {
@@ -185,12 +185,15 @@ export default function SettingsTransfer() {
       const parsed = JSON.parse(text);
       const normalized = normalizeImportData(parsed);
 
-      setApiConfigs(normalized.apiConfigs);
+      const didSaveConfigs = await setApiConfigs(normalized.apiConfigs);
+      if (!didSaveConfigs) {
+        throw new Error('Failed to save API configurations.');
+      }
       const didSavePresets = await setAssistantPresets(normalized.assistantPresets);
       if (!didSavePresets) {
         throw new Error('Failed to save assistant presets.');
       }
-      setDefaultPresetId(normalized.defaultPresetId);
+      await setDefaultPresetId(normalized.defaultPresetId);
       window.dispatchEvent(new Event(SETTINGS_UPDATED_EVENT));
 
       setStatus({

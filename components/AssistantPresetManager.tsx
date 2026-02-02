@@ -33,11 +33,11 @@ export default function AssistantPresetManager() {
       const loadedPresets = await getAssistantPresets();
       if (!cancelled) {
         setPresets(loadedPresets);
-        setDefaultPresetIdState(getDefaultPresetId());
+        setDefaultPresetIdState(await getDefaultPresetId());
       }
 
       // Get all available models from API configs
-      const configs = getApiConfigs();
+      const configs = await getApiConfigs();
       if (!cancelled) {
         setApiConfigs(configs);
         const models = configs.flatMap(c => c.models);
@@ -164,20 +164,23 @@ export default function AssistantPresetManager() {
       }
 
       setPresets(await getAssistantPresets());
-      setDefaultPresetIdState(getDefaultPresetId());
+      setDefaultPresetIdState(await getDefaultPresetId());
       window.dispatchEvent(new Event('settingsUpdated'));
     }
   };
 
   const toggleDefault = (id: string) => {
-    if (defaultPresetId === id) {
-      setDefaultPresetId(null);
-      setDefaultPresetIdState(null);
-    } else {
-      setDefaultPresetId(id);
-      setDefaultPresetIdState(id);
-    }
-    window.dispatchEvent(new Event('settingsUpdated'));
+    const runToggle = async () => {
+      if (defaultPresetId === id) {
+        await setDefaultPresetId(null);
+        setDefaultPresetIdState(null);
+      } else {
+        await setDefaultPresetId(id);
+        setDefaultPresetIdState(id);
+      }
+      window.dispatchEvent(new Event('settingsUpdated'));
+    };
+    void runToggle();
   };
 
   const handleCancel = () => {

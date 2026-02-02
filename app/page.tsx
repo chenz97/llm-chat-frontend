@@ -69,7 +69,7 @@ export default function Home() {
     setMounted(true);
 
     const initialize = async () => {
-      const configs = getApiConfigs();
+      const configs = await getApiConfigs();
       if (configs.length === 0) {
         if (!cancelled) {
           setIsSettingsOpen(true);
@@ -87,7 +87,10 @@ export default function Home() {
       let apiConfigIdToUse: string | undefined;
       let presetToUse: string | undefined;
 
-      if (storedConversation && getApiConfig(storedConversation.apiConfigId)) {
+      const storedApiConfig = storedConversation
+        ? await getApiConfig(storedConversation.apiConfigId)
+        : undefined;
+      if (storedConversation && storedApiConfig) {
         apiConfigIdToUse = storedConversation.apiConfigId;
         if (storedConversation.assistantPresetId) {
           const preset = await getAssistantPreset(storedConversation.assistantPresetId);
@@ -107,7 +110,8 @@ export default function Home() {
           const latestConversation = existingConversations.sort(
             (a, b) => b.updatedAt - a.updatedAt
           )[0];
-          if (getApiConfig(latestConversation.apiConfigId)) {
+          const latestConfig = await getApiConfig(latestConversation.apiConfigId);
+          if (latestConfig) {
             apiConfigIdToUse = latestConversation.apiConfigId;
           }
           if (latestConversation.assistantPresetId) {
@@ -120,11 +124,15 @@ export default function Home() {
       }
 
       if (!apiConfigIdToUse) {
-        const defaultPresetId = getDefaultPresetId();
+        const defaultPresetId = await getDefaultPresetId();
         const defaultPreset = defaultPresetId ? await getAssistantPreset(defaultPresetId) : undefined;
-        const presetProviderId = defaultPreset?.apiConfigId && getApiConfig(defaultPreset.apiConfigId)
-          ? defaultPreset.apiConfigId
-          : undefined;
+        let presetProviderId: string | undefined;
+        if (defaultPreset?.apiConfigId) {
+          const providerConfig = await getApiConfig(defaultPreset.apiConfigId);
+          if (providerConfig) {
+            presetProviderId = defaultPreset.apiConfigId;
+          }
+        }
         apiConfigIdToUse = presetProviderId || configs[0].id;
         presetToUse = defaultPresetId || undefined;
       }
@@ -260,9 +268,13 @@ export default function Home() {
   const handlePresetChange = (id: string | undefined) => {
     const updatePreset = async () => {
       const preset = id ? await getAssistantPreset(id) : undefined;
-      const presetProviderId = preset?.apiConfigId && getApiConfig(preset.apiConfigId)
-        ? preset.apiConfigId
-        : undefined;
+      let presetProviderId: string | undefined;
+      if (preset?.apiConfigId) {
+        const providerConfig = await getApiConfig(preset.apiConfigId);
+        if (providerConfig) {
+          presetProviderId = preset.apiConfigId;
+        }
+      }
       const currentApiConfigId = currentConversation?.apiConfigId || selectedApiConfigId;
       const nextApiConfigId = presetProviderId || currentApiConfigId;
 
@@ -292,10 +304,13 @@ export default function Home() {
     setIsSettingsOpen(false);
 
     if (!selectedApiConfigId) {
-      const configs = getApiConfigs();
-      if (configs.length > 0) {
-        setSelectedApiConfigId(configs[0].id);
-      }
+      const resolveConfig = async () => {
+        const configs = await getApiConfigs();
+        if (configs.length > 0) {
+          setSelectedApiConfigId(configs[0].id);
+        }
+      };
+      void resolveConfig();
     }
   };
 

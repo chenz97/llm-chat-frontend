@@ -61,8 +61,13 @@ export default function ChatInterface({
     if (conversation) {
       setMessages(conversation.messages);
 
-      const config = getApiConfig(conversation.apiConfigId);
-      setApiConfig(config || null);
+      const loadConfig = async () => {
+        const config = await getApiConfig(conversation.apiConfigId);
+        if (!cancelled) {
+          setApiConfig(config || null);
+        }
+      };
+      void loadConfig();
 
       if (conversation.assistantPresetId) {
         const presetId = conversation.assistantPresetId;
@@ -218,7 +223,16 @@ export default function ChatInterface({
   };
 
   const startAssistantResponse = async (baseMessages: ChatMessage[], titleSeed?: string) => {
-    if (!conversation || !apiConfig) return;
+    if (!conversation) return;
+
+    let resolvedApiConfig = apiConfig;
+    if (!resolvedApiConfig || resolvedApiConfig.id !== conversation.apiConfigId) {
+      resolvedApiConfig = await getApiConfig(conversation.apiConfigId);
+    }
+    if (!resolvedApiConfig) return;
+    if (!apiConfig || apiConfig.id !== resolvedApiConfig.id) {
+      setApiConfig(resolvedApiConfig);
+    }
 
     const conversationId = conversation.id;
     abortControllerRef.current?.abort();
@@ -281,7 +295,7 @@ export default function ChatInterface({
     let latestUsage: TokenUsage | null = null;
 
     const request: ChatCompletionRequest = {
-      model: resolvedPreset?.modelId || apiConfig.models[0] || 'gpt-3.5-turbo',
+      model: resolvedPreset?.modelId || resolvedApiConfig.models[0] || 'gpt-3.5-turbo',
       messages: apiMessages,
       ...(resolvedPreset?.parameters || {}),
     };
@@ -294,8 +308,8 @@ export default function ChatInterface({
 
     try {
       await streamChatCompletion(
-        apiConfig.baseUrl,
-        apiConfig.apiKey,
+        resolvedApiConfig.baseUrl,
+        resolvedApiConfig.apiKey,
         request,
         {
           onMessage: (chunk) => {
@@ -466,7 +480,16 @@ export default function ChatInterface({
     e.preventDefault();
 
     const trimmedInput = input.trim();
-    if (!trimmedInput || !conversation || !apiConfig || isLoading) return;
+    if (!trimmedInput || !conversation || isLoading) return;
+
+    if (!apiConfig) {
+      const resolvedConfig = await getApiConfig(conversation.apiConfigId);
+      if (!resolvedConfig) {
+        alert('Please select an API configuration first');
+        return;
+      }
+      setApiConfig(resolvedConfig);
+    }
 
     const userMessage: ChatMessage = {
       id: generateId(),
@@ -484,7 +507,16 @@ export default function ChatInterface({
   };
 
   const handleRegenerate = async (messageId: string) => {
-    if (!conversation || !apiConfig || isLoading) return;
+    if (!conversation || isLoading) return;
+
+    if (!apiConfig) {
+      const resolvedConfig = await getApiConfig(conversation.apiConfigId);
+      if (!resolvedConfig) {
+        alert('Please select an API configuration first');
+        return;
+      }
+      setApiConfig(resolvedConfig);
+    }
 
     const targetIndex = messages.findIndex((msg) => msg.id === messageId);
     if (targetIndex === -1) return;

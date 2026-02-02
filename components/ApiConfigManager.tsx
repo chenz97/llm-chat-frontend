@@ -13,8 +13,21 @@ export default function ApiConfigManager() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     setMounted(true);
-    setConfigs(getApiConfigs());
+
+    const loadConfigs = async () => {
+      const loaded = await getApiConfigs();
+      if (!cancelled) {
+        setConfigs(loaded);
+      }
+    };
+
+    void loadConfigs();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (!mounted) {
@@ -35,7 +48,7 @@ export default function ApiConfigManager() {
     setModelsInput('');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.id) return;
 
     const config: ApiConfig = {
@@ -47,8 +60,13 @@ export default function ApiConfigManager() {
       createdAt: formData.createdAt || Date.now(),
     };
 
-    saveApiConfig(config);
-    setConfigs(getApiConfigs());
+    const didSave = await saveApiConfig(config);
+    if (!didSave) {
+      alert('Failed to save API configuration. Your browser storage may be full.');
+      return;
+    }
+
+    setConfigs(await getApiConfigs());
     setEditing(null);
     setFormData({});
     window.dispatchEvent(new Event('settingsUpdated'));
@@ -60,10 +78,15 @@ export default function ApiConfigManager() {
     setModelsInput((config.models || []).join(', '));
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this API configuration?')) {
-      deleteApiConfig(id);
-      setConfigs(getApiConfigs());
+      const didDelete = await deleteApiConfig(id);
+      if (!didDelete) {
+        alert('Failed to delete API configuration. Please try again.');
+        return;
+      }
+
+      setConfigs(await getApiConfigs());
       window.dispatchEvent(new Event('settingsUpdated'));
     }
   };

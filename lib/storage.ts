@@ -9,10 +9,13 @@ const STORAGE_KEYS = {
 
 const DB_CONFIG = {
   NAME: 'llm_chat_db',
-  VERSION: 2,
+  VERSION: 3,
 } as const;
 
+const DB_OPEN_TIMEOUT = 2000;
+
 const DB_STORES = {
+  API_CONFIGS: 'api_configs',
   CONVERSATIONS: 'conversations',
   ASSISTANT_PRESETS: 'assistant_presets',
   META: 'meta',
@@ -20,6 +23,7 @@ const DB_STORES = {
 
 const META_KEYS = {
   CURRENT_CONVERSATION_ID: 'current_conversation_id',
+  DEFAULT_PRESET_ID: 'default_preset_id',
 } as const;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -76,11 +80,31 @@ function openDb(): Promise<IDBDatabase> {
 
   if (dbPromise) return dbPromise;
 
-  dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_CONFIG.NAME, DB_CONFIG.VERSION);
+  const openWithVersion = (version?: number) => new Promise<IDBDatabase>((resolve, reject) => {
+    const request = version === undefined
+      ? indexedDB.open(DB_CONFIG.NAME)
+      : indexedDB.open(DB_CONFIG.NAME, version);
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('IndexedDB open timed out'));
+    }, DB_OPEN_TIMEOUT);
+
+    const finalize = (db?: IDBDatabase) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      if (db) {
+        db.onversionchange = () => db.close();
+      }
+    };
 
     request.onupgradeneeded = () => {
       const db = request.result;
+      if (!db.objectStoreNames.contains(DB_STORES.API_CONFIGS)) {
+        db.createObjectStore(DB_STORES.API_CONFIGS, { keyPath: 'id' });
+      }
       if (!db.objectStoreNames.contains(DB_STORES.CONVERSATIONS)) {
         db.createObjectStore(DB_STORES.CONVERSATIONS, { keyPath: 'id' });
       }
@@ -92,42 +116,231 @@ function openDb(): Promise<IDBDatabase> {
       }
     };
 
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error('IndexedDB open failed'));
+    request.onsuccess = () => {
+      const db = request.result;
+      finalize(db);
+      resolve(db);
+    };
+    request.onerror = () => {
+      finalize();
+      reject(request.error || new Error('IndexedDB open failed'));
+    };
+    request.onblocked = () => {
+      finalize();
+      reject(new Error('IndexedDB open blocked'));
+    };
   });
+
+  dbPromise = (async () => {
+    try {
+      return await openWithVersion(DB_CONFIG.VERSION);
+    } catch (error) {
+      try {
+        return await openWithVersion();
+      } catch (fallbackError) {
+        dbPromise = null;
+        throw fallbackError;
+      }
+    }
+  })();
 
   return dbPromise;
 }
 
 // API Configs
-export function getApiConfigs(): ApiConfig[] {
-  return getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, []);
+function clearApiConfigsStorage(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEYS.API_CONFIGS);
+  } catch (error) {
+    console.error(`Error clearing localStorage (${STORAGE_KEYS.API_CONFIGS}):`, error);
+  }
 }
 
-export function setApiConfigs(configs: ApiConfig[]): void {
-  saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
+async function migrateApiConfigsToStore(store: IDBObjectStore): Promise<boolean> {
+  const fallback = getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, []);
+  if (fallback.length === 0) return false;
+
+  const count = await requestToPromise(store.count());
+  if (count > 0) return false;
+
+  fallback.forEach((config) => {
+    store.put(config);
+  });
+
+  return true;
 }
 
-export function saveApiConfig(config: ApiConfig): void {
-  const configs = getApiConfigs();
-  const index = configs.findIndex(c => c.id === config.id);
+export async function getApiConfigs(): Promise<ApiConfig[]> {
+  const fallback = getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, []);
 
-  if (index >= 0) {
-    configs[index] = config;
-  } else {
-    configs.push(config);
+  if (!isIndexedDbAvailable()) return fallback;
+
+  try {
+    const db = await openDb();
+    if (!hasStore(db, DB_STORES.API_CONFIGS)) {
+      return fallback;
+    }
+    const tx = db.transaction(DB_STORES.API_CONFIGS, 'readonly');
+    const store = tx.objectStore(DB_STORES.API_CONFIGS);
+    const result = await requestToPromise(store.getAll());
+    await transactionComplete(tx);
+    const configs = Array.isArray(result) ? result : [];
+
+    if (configs.length > 0) {
+      return configs;
+    }
+
+    if (fallback.length > 0) {
+      await setApiConfigs(fallback);
+    }
+
+    return fallback;
+  } catch (error) {
+    console.error('Error loading API configs from IndexedDB:', error);
+    return fallback;
+  }
+}
+
+export async function setApiConfigs(configs: ApiConfig[]): Promise<boolean> {
+  if (!isIndexedDbAvailable()) {
+    return saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
   }
 
-  saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
+  try {
+    const db = await openDb();
+    if (!hasStore(db, DB_STORES.API_CONFIGS)) {
+      return saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
+    }
+    const tx = db.transaction(DB_STORES.API_CONFIGS, 'readwrite');
+    const store = tx.objectStore(DB_STORES.API_CONFIGS);
+
+    store.clear();
+    configs.forEach((config) => {
+      store.put(config);
+    });
+
+    await transactionComplete(tx);
+    clearApiConfigsStorage();
+    return true;
+  } catch (error) {
+    console.error('Error saving API configs to IndexedDB:', error);
+    return saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
+  }
 }
 
-export function deleteApiConfig(id: string): void {
-  const configs = getApiConfigs().filter(c => c.id !== id);
-  saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
+export async function saveApiConfig(config: ApiConfig): Promise<boolean> {
+  if (!isIndexedDbAvailable()) {
+    const configs = getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, []);
+    const index = configs.findIndex(c => c.id === config.id);
+
+    if (index >= 0) {
+      configs[index] = config;
+    } else {
+      configs.push(config);
+    }
+
+    return saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
+  }
+
+  try {
+    const db = await openDb();
+    if (!hasStore(db, DB_STORES.API_CONFIGS)) {
+      const configs = getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, []);
+      const index = configs.findIndex(c => c.id === config.id);
+
+      if (index >= 0) {
+        configs[index] = config;
+      } else {
+        configs.push(config);
+      }
+
+      return saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
+    }
+    const tx = db.transaction(DB_STORES.API_CONFIGS, 'readwrite');
+    const store = tx.objectStore(DB_STORES.API_CONFIGS);
+    await migrateApiConfigsToStore(store);
+    store.put(config);
+    await transactionComplete(tx);
+    clearApiConfigsStorage();
+    return true;
+  } catch (error) {
+    console.error('Error saving API config to IndexedDB:', error);
+    const configs = getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, []);
+    const index = configs.findIndex(c => c.id === config.id);
+
+    if (index >= 0) {
+      configs[index] = config;
+    } else {
+      configs.push(config);
+    }
+
+    return saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
+  }
 }
 
-export function getApiConfig(id: string): ApiConfig | undefined {
-  return getApiConfigs().find(c => c.id === id);
+export async function deleteApiConfig(id: string): Promise<boolean> {
+  let removed = false;
+
+  if (!isIndexedDbAvailable()) {
+    const configs = getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, [])
+      .filter(c => c.id !== id);
+    removed = saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
+  } else {
+    try {
+      const db = await openDb();
+      if (!hasStore(db, DB_STORES.API_CONFIGS)) {
+        const configs = getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, [])
+          .filter(c => c.id !== id);
+        removed = saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
+        return removed;
+      }
+      const tx = db.transaction(DB_STORES.API_CONFIGS, 'readwrite');
+      const store = tx.objectStore(DB_STORES.API_CONFIGS);
+      await migrateApiConfigsToStore(store);
+      store.delete(id);
+      await transactionComplete(tx);
+      clearApiConfigsStorage();
+      removed = true;
+    } catch (error) {
+      console.error('Error deleting API config from IndexedDB:', error);
+      const configs = getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, [])
+        .filter(c => c.id !== id);
+      removed = saveToStorage(STORAGE_KEYS.API_CONFIGS, configs);
+    }
+  }
+
+  return removed;
+}
+
+export async function getApiConfig(id: string): Promise<ApiConfig | undefined> {
+  if (!isIndexedDbAvailable()) {
+    return getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, [])
+      .find(c => c.id === id);
+  }
+
+  try {
+    const db = await openDb();
+    if (!hasStore(db, DB_STORES.API_CONFIGS)) {
+      return getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, [])
+        .find(c => c.id === id);
+    }
+    const tx = db.transaction(DB_STORES.API_CONFIGS, 'readonly');
+    const store = tx.objectStore(DB_STORES.API_CONFIGS);
+    const result = await requestToPromise<ApiConfig | undefined>(store.get(id));
+    await transactionComplete(tx);
+    if (result) return result;
+
+    const fallback = getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, []);
+    if (fallback.length > 0) {
+      await setApiConfigs(fallback);
+    }
+    return fallback.find(c => c.id === id);
+  } catch (error) {
+    console.error('Error loading API config from IndexedDB:', error);
+    return getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, [])
+      .find(c => c.id === id);
+  }
 }
 
 // Assistant Presets
@@ -137,6 +350,15 @@ function clearAssistantPresetsStorage(): void {
     localStorage.removeItem(STORAGE_KEYS.ASSISTANT_PRESETS);
   } catch (error) {
     console.error(`Error clearing localStorage (${STORAGE_KEYS.ASSISTANT_PRESETS}):`, error);
+  }
+}
+
+function clearDefaultPresetStorage(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEYS.DEFAULT_PRESET_ID);
+  } catch (error) {
+    console.error(`Error clearing localStorage (${STORAGE_KEYS.DEFAULT_PRESET_ID}):`, error);
   }
 }
 
@@ -169,6 +391,10 @@ async function migrateAssistantPresetsToStore(store: IDBObjectStore): Promise<bo
   return true;
 }
 
+function hasStore(db: IDBDatabase, storeName: string): boolean {
+  return db.objectStoreNames.contains(storeName);
+}
+
 export async function getAssistantPresets(): Promise<AssistantPreset[]> {
   const fallback = getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, []);
 
@@ -176,6 +402,9 @@ export async function getAssistantPresets(): Promise<AssistantPreset[]> {
 
   try {
     const db = await openDb();
+    if (!hasStore(db, DB_STORES.ASSISTANT_PRESETS)) {
+      return fallback;
+    }
     const tx = db.transaction(DB_STORES.ASSISTANT_PRESETS, 'readonly');
     const store = tx.objectStore(DB_STORES.ASSISTANT_PRESETS);
     const result = await requestToPromise(store.getAll());
@@ -207,6 +436,9 @@ export async function setAssistantPresets(presets: AssistantPreset[]): Promise<b
 
   try {
     const db = await openDb();
+    if (!hasStore(db, DB_STORES.ASSISTANT_PRESETS)) {
+      return saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
+    }
     const tx = db.transaction(DB_STORES.ASSISTANT_PRESETS, 'readwrite');
     const store = tx.objectStore(DB_STORES.ASSISTANT_PRESETS);
 
@@ -240,6 +472,18 @@ export async function saveAssistantPreset(preset: AssistantPreset): Promise<bool
 
   try {
     const db = await openDb();
+    if (!hasStore(db, DB_STORES.ASSISTANT_PRESETS)) {
+      const presets = getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, []);
+      const index = presets.findIndex(p => p.id === preset.id);
+
+      if (index >= 0) {
+        presets[index] = preset;
+      } else {
+        presets.push(preset);
+      }
+
+      return saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
+    }
     const tx = db.transaction(DB_STORES.ASSISTANT_PRESETS, 'readwrite');
     const store = tx.objectStore(DB_STORES.ASSISTANT_PRESETS);
     const didMigrate = await migrateAssistantPresetsToStore(store);
@@ -275,6 +519,18 @@ export async function deleteAssistantPreset(id: string): Promise<boolean> {
   } else {
     try {
       const db = await openDb();
+      if (!hasStore(db, DB_STORES.ASSISTANT_PRESETS)) {
+        const presets = getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, [])
+          .filter(p => p.id !== id);
+        removed = saveToStorage(STORAGE_KEYS.ASSISTANT_PRESETS, presets);
+        if (removed) {
+          const defaultPresetId = await getDefaultPresetId();
+          if (defaultPresetId === id) {
+            await setDefaultPresetId(null);
+          }
+        }
+        return removed;
+      }
       const tx = db.transaction(DB_STORES.ASSISTANT_PRESETS, 'readwrite');
       const store = tx.objectStore(DB_STORES.ASSISTANT_PRESETS);
       const didMigrate = await migrateAssistantPresetsToStore(store);
@@ -294,8 +550,11 @@ export async function deleteAssistantPreset(id: string): Promise<boolean> {
   }
 
   // Clear default if deleting default preset
-  if (removed && getDefaultPresetId() === id) {
-    setDefaultPresetId(null);
+  if (removed) {
+    const defaultPresetId = await getDefaultPresetId();
+    if (defaultPresetId === id) {
+      await setDefaultPresetId(null);
+    }
   }
 
   return removed;
@@ -309,6 +568,10 @@ export async function getAssistantPreset(id: string): Promise<AssistantPreset | 
 
   try {
     const db = await openDb();
+    if (!hasStore(db, DB_STORES.ASSISTANT_PRESETS)) {
+      return getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, [])
+        .find(p => p.id === id);
+    }
     const tx = db.transaction(DB_STORES.ASSISTANT_PRESETS, 'readonly');
     const store = tx.objectStore(DB_STORES.ASSISTANT_PRESETS);
     const result = await requestToPromise<AssistantPreset | undefined>(store.get(id));
@@ -350,12 +613,61 @@ export function clearAssistantPresetsMigrationNotice(): void {
 }
 
 // Default Preset
-export function getDefaultPresetId(): string | null {
-  return getFromStorage<string | null>(STORAGE_KEYS.DEFAULT_PRESET_ID, null);
+export async function getDefaultPresetId(): Promise<string | null> {
+  const fallback = getFromStorage<string | null>(STORAGE_KEYS.DEFAULT_PRESET_ID, null);
+
+  if (!isIndexedDbAvailable()) return fallback;
+
+  try {
+    const db = await openDb();
+    if (!hasStore(db, DB_STORES.META)) {
+      return fallback;
+    }
+    const tx = db.transaction(DB_STORES.META, 'readonly');
+    const store = tx.objectStore(DB_STORES.META);
+    const entry = await requestToPromise<{ key: string; value: string } | undefined>(
+      store.get(META_KEYS.DEFAULT_PRESET_ID)
+    );
+    await transactionComplete(tx);
+    if (entry?.value) return entry.value;
+
+    if (fallback) {
+      await setDefaultPresetId(fallback);
+    }
+    return fallback;
+  } catch (error) {
+    console.error('Error loading default preset id from IndexedDB:', error);
+    return fallback;
+  }
 }
 
-export function setDefaultPresetId(id: string | null): void {
-  saveToStorage(STORAGE_KEYS.DEFAULT_PRESET_ID, id);
+export async function setDefaultPresetId(id: string | null): Promise<void> {
+  if (!isIndexedDbAvailable()) {
+    saveToStorage(STORAGE_KEYS.DEFAULT_PRESET_ID, id);
+    return;
+  }
+
+  try {
+    const db = await openDb();
+    if (!hasStore(db, DB_STORES.META)) {
+      saveToStorage(STORAGE_KEYS.DEFAULT_PRESET_ID, id);
+      return;
+    }
+    const tx = db.transaction(DB_STORES.META, 'readwrite');
+    const store = tx.objectStore(DB_STORES.META);
+
+    if (id === null) {
+      store.delete(META_KEYS.DEFAULT_PRESET_ID);
+    } else {
+      store.put({ key: META_KEYS.DEFAULT_PRESET_ID, value: id });
+    }
+
+    await transactionComplete(tx);
+    clearDefaultPresetStorage();
+  } catch (error) {
+    console.error('Error saving default preset id to IndexedDB:', error);
+    saveToStorage(STORAGE_KEYS.DEFAULT_PRESET_ID, id);
+  }
 }
 
 // Conversations
