@@ -293,6 +293,7 @@ export default function ChatInterface({
 
     let accumulatedContent = '';
     let latestUsage: TokenUsage | null = null;
+    let rawResponseLines: string[] = [];
 
     const request: ChatCompletionRequest = {
       model: resolvedPreset?.modelId || resolvedApiConfig.models[0] || 'gpt-3.5-turbo',
@@ -347,6 +348,9 @@ export default function ChatInterface({
 
             persistStreamMessages(conversationId, streamMessages);
           },
+          onRawEvent: (rawLine) => {
+            rawResponseLines.push(rawLine);
+          },
           onError: (error) => {
             if (error.name === 'AbortError') {
               if (activeConversationIdRef.current === conversationId) {
@@ -378,11 +382,15 @@ export default function ChatInterface({
             clearPersistTimer();
           },
           onComplete: () => {
+            const rawResponse = rawResponseLines.length > 0
+              ? rawResponseLines.join('\n')
+              : undefined;
             const finalMessages = [
               ...baseMessages,
               {
                 ...assistantMessage,
                 content: accumulatedContent,
+                rawResponse,
                 usage: latestUsage || undefined,
                 ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
               },

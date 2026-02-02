@@ -4,8 +4,9 @@ import { useState } from 'react';
 import { ChatMessage } from '@/types';
 import MarkdownRenderer from './MarkdownRenderer';
 import ImageLightbox from './ImageLightbox';
-import { User, Bot, Copy, Check, Pencil, X, Save, RotateCw, Maximize2 } from 'lucide-react';
+import { User, Bot, Copy, Check, Pencil, X, Save, RotateCw, Maximize2, FileText } from 'lucide-react';
 import Image from 'next/image';
+import RawResponseModal from './RawResponseModal';
 
 interface MessageProps {
   message: ChatMessage;
@@ -19,6 +20,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
   const [editContent, setEditContent] = useState(message.content);
   const [copied, setCopied] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [isRawOpen, setIsRawOpen] = useState(false);
 
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
@@ -31,6 +33,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
     && message.firstTokenTimestamp >= message.timestamp
     ? (message.firstTokenTimestamp - message.timestamp) / 1000
     : undefined;
+  const canShowRawResponse = !isUser && !isSystem && !!message.rawResponse;
   const showUsage = !isUser
     && !isSystem
     && (
@@ -221,16 +224,38 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
               ) : (
                 <MarkdownRenderer content={message.content} />
               )}
-              {showUsage && (
-                <div className="mt-2 text-xs text-slate-400 text-right">
-                  prompt {promptTokens ?? '-'} | reasoning {reasoningTokens ?? '-'} | completion {completionTokens ?? '-'}
-                  {latencySeconds !== undefined ? ` | latency ${latencySeconds.toFixed(1)}s` : ''}
+              {(showUsage || canShowRawResponse) && (
+                <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-xs text-slate-400">
+                  {showUsage && (
+                    <span>
+                      prompt {promptTokens ?? '-'} | reasoning {reasoningTokens ?? '-'} | completion {completionTokens ?? '-'}
+                      {latencySeconds !== undefined ? ` | latency ${latencySeconds.toFixed(1)}s` : ''}
+                    </span>
+                  )}
+                  {canShowRawResponse && (
+                    <button
+                      type="button"
+                      onClick={() => setIsRawOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
+                      title="查看原始响应体"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      原始响应
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           </div>
         </div>
       </div>
+      {canShowRawResponse && (
+        <RawResponseModal
+          isOpen={isRawOpen}
+          rawResponse={message.rawResponse ?? ''}
+          onClose={() => setIsRawOpen(false)}
+        />
+      )}
     </div>
   );
 }

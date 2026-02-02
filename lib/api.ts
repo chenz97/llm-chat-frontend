@@ -5,6 +5,7 @@ export interface StreamCallbacks {
   onError: (error: Error) => void;
   onComplete: () => void;
   onUsage?: (usage: TokenUsage) => void;
+  onRawEvent?: (rawLine: string) => void;
 }
 
 function coerceNumber(value: unknown): number | undefined {
@@ -95,12 +96,18 @@ export async function streamChatCompletion(
 
       for (const line of lines) {
         const trimmedLine = line.trim();
-        if (!trimmedLine || trimmedLine === 'data: [DONE]') {
+        if (!trimmedLine) {
+          continue;
+        }
+
+        if (trimmedLine === 'data: [DONE]') {
+          callbacks.onRawEvent?.(trimmedLine);
           continue;
         }
 
         if (trimmedLine.startsWith('data: ')) {
           try {
+            callbacks.onRawEvent?.(trimmedLine);
             const jsonStr = trimmedLine.slice(6);
             const data = JSON.parse(jsonStr);
 

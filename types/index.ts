@@ -59,6 +59,7 @@ export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
   imageUrl?: string; // For user uploaded images
+  rawResponse?: string;
   usage?: TokenUsage;
   timestamp: number;
   firstTokenTimestamp?: number;
