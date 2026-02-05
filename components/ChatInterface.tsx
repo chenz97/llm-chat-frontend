@@ -8,6 +8,7 @@ import {
   AssistantPreset,
   TokenUsage,
   ChatCompletionRequest,
+  ModelParameters,
 } from '@/types';
 import {
   saveConversation,
@@ -25,6 +26,27 @@ interface ChatInterfaceProps {
   conversation: Conversation | null;
   onConversationUpdate: (conversationId?: string) => void | Promise<void>;
 }
+
+const parseParameterValue = (value: unknown): unknown => {
+  if (typeof value !== 'string') return value;
+
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const normalizeModelParameters = (parameters?: ModelParameters): ModelParameters => {
+  if (!parameters) return {};
+
+  return Object.fromEntries(
+    Object.entries(parameters).map(([key, value]) => [key, parseParameterValue(value)])
+  ) as ModelParameters;
+};
 
 export default function ChatInterface({
   conversation,
@@ -298,7 +320,7 @@ export default function ChatInterface({
     const request: ChatCompletionRequest = {
       model: resolvedPreset?.modelId || resolvedApiConfig.models[0] || 'gpt-3.5-turbo',
       messages: apiMessages,
-      ...(resolvedPreset?.parameters || {}),
+      ...normalizeModelParameters(resolvedPreset?.parameters),
     };
 
     const streamOptions = request.stream_options;
