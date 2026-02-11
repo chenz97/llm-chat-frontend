@@ -119,6 +119,7 @@ export default function AssistantPresetManager() {
       modelId: availableModels[0] || '',
       systemPrompt: '',
       parameters: {},
+      useVercelServerProxy: false,
       createdAt: Date.now(),
     };
     setEditing(newPreset.id);
@@ -135,6 +136,7 @@ export default function AssistantPresetManager() {
       modelId: formData.modelId || '',
       systemPrompt: formData.systemPrompt || '',
       parameters: formData.parameters || {},
+      useVercelServerProxy: formData.useVercelServerProxy === true,
       createdAt: formData.createdAt || Date.now(),
     };
 
@@ -297,6 +299,16 @@ export default function AssistantPresetManager() {
                   className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900 resize-none"
                 />
 
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={formData.useVercelServerProxy === true}
+                    onChange={(e) => setFormData({ ...formData, useVercelServerProxy: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Send requests via Vercel server proxy
+                </label>
+
                 <div className="space-y-2">
                   <label className="text-base text-slate-600 font-medium">Model Parameters</label>
                   {Object.entries(formData.parameters || {}).map(([key, value]) => (
@@ -402,6 +414,9 @@ export default function AssistantPresetManager() {
                   <div className="flex-1">
                     <h3 className="font-semibold text-xl text-slate-900">{preset.name}</h3>
                     <p className="text-base text-slate-600 mt-1">Model: {preset.modelId}</p>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Request mode: {preset.useVercelServerProxy ? 'Vercel proxy' : 'Browser direct'}
+                    </p>
                     {preset.apiConfigId && (
                       <p className="text-sm text-slate-500 mt-1">
                         Provider: {apiConfigs.find((config) => config.id === preset.apiConfigId)?.name || 'Unknown provider'}
@@ -498,6 +513,16 @@ export default function AssistantPresetManager() {
                 rows={4}
                 className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900 resize-none"
               />
+
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={formData.useVercelServerProxy === true}
+                  onChange={(e) => setFormData({ ...formData, useVercelServerProxy: e.target.checked })}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                Send requests via Vercel server proxy
+              </label>
 
               <div className="space-y-2">
                 <label className="text-base text-gray-400">Model Parameters</label>

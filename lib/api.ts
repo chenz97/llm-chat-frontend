@@ -1,5 +1,12 @@
 import { Message, ChatCompletionRequest, TokenUsage } from '@/types';
 
+const VERCEL_PROXY_ENDPOINT = '/api/chat/completions';
+
+export interface StreamOptions {
+  signal?: AbortSignal;
+  useVercelServerProxy?: boolean;
+}
+
 export interface StreamCallbacks {
   onMessage: (chunk: string) => void;
   onError: (error: Error) => void;
@@ -42,32 +49,41 @@ export async function streamChatCompletion(
   apiKey: string,
   request: ChatCompletionRequest,
   callbacks: StreamCallbacks,
-  options?: { signal?: AbortSignal }
+  options?: StreamOptions
 ): Promise<void> {
   const { onMessage, onError, onComplete } = callbacks;
 
   try {
-    // Ensure baseUrl ends with /v1 or /v1/chat/completions
-    let endpoint = baseUrl.replace(/\/$/, '');
-    if (!endpoint.endsWith('/chat/completions')) {
-      if (!endpoint.endsWith('/v1')) {
-        endpoint += '/v1';
-      }
-      endpoint += '/chat/completions';
-    }
+    const shouldUseServerProxy = options?.useVercelServerProxy === true;
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        ...request,
-        stream: true,
-      }),
-      signal: options?.signal,
-    });
+    const response = shouldUseServerProxy
+      ? await fetch(VERCEL_PROXY_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          baseUrl,
+          apiKey,
+          request: {
+            ...request,
+            stream: true,
+          },
+        }),
+        signal: options?.signal,
+      })
+      : await fetch(resolveChatCompletionsEndpoint(baseUrl), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          ...request,
+          stream: true,
+        }),
+        signal: options?.signal,
+      });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -134,6 +150,17 @@ export async function streamChatCompletion(
 
     onError(error instanceof Error ? error : new Error(String(error)));
   }
+}
+
+function resolveChatCompletionsEndpoint(baseUrl: string): string {
+  let endpoint = baseUrl.replace(/\/$/, '');
+  if (!endpoint.endsWith('/chat/completions')) {
+    if (!endpoint.endsWith('/v1')) {
+      endpoint += '/v1';
+    }
+    endpoint += '/chat/completions';
+  }
+  return endpoint;
 }
 
 export function convertToOpenAIMessages(

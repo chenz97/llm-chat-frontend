@@ -45,6 +45,7 @@ export interface AssistantPreset {
   modelId: string;
   systemPrompt: string;
   parameters: ModelParameters;
+  useVercelServerProxy?: boolean;
   createdAt: number;
 }
 

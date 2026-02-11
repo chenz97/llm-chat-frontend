@@ -447,6 +447,7 @@ export default function ChatInterface({
         },
         {
           signal: abortControllerRef.current?.signal,
+          useVercelServerProxy: resolvedPreset?.useVercelServerProxy === true,
         }
       );
     } catch (error) {

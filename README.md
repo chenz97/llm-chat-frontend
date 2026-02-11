@@ -88,7 +88,16 @@ Create reusable assistant configurations:
    - **Name**: Preset name
    - **Model**: Select from your configured models
    - **System Prompt**: Set the assistant's behavior
+   - **Send requests via Vercel server proxy**: When enabled, requests are sent to the app's `/api/chat/completions` route first and then forwarded server-side
    - **Parameters**: Add model parameters like temperature, max_tokens, etc.
+
+### Vercel Server-Side Proxy
+
+When `Send requests via Vercel server proxy` is enabled in a preset, the browser sends chat requests to this app first (`/api/chat/completions`). The Next.js server route then forwards the streaming request to your configured upstream API endpoint.
+
+Notes:
+- This can help avoid direct browser-to-provider requests in deployed environments like Vercel.
+- In the current implementation, the API key still comes from your saved API configuration in the browser settings.
 
 ### 3. Start Chatting
 

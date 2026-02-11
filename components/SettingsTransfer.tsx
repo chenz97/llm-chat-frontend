@@ -69,6 +69,7 @@ const sanitizeAssistantPresets = (rawPresets: unknown): AssistantPreset[] => {
       modelId: typeof preset.modelId === 'string' ? preset.modelId : '',
       systemPrompt: typeof preset.systemPrompt === 'string' ? preset.systemPrompt : '',
       parameters: parameters as AssistantPreset['parameters'],
+      useVercelServerProxy: preset.useVercelServerProxy === true,
       createdAt: typeof preset.createdAt === 'number' ? preset.createdAt : Date.now(),
     });
   }
