@@ -139,19 +139,19 @@ export default function ChatInterface({
     };
   }, [conversation]);
 
-  useEffect(() => {
-    if (autoScrollEnabledRef.current) {
-      scrollToBottom(isStreamingRef.current ? 'auto' : 'smooth');
-    }
-  }, [messages]);
-
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+  function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
     const container = scrollContainerRef.current;
     if (!container) return;
 
     const maxScrollTop = container.scrollHeight - container.clientHeight;
     container.scrollTo({ top: Math.max(0, maxScrollTop), behavior });
-  };
+  }
+
+  useEffect(() => {
+    if (autoScrollEnabledRef.current) {
+      scrollToBottom(isStreamingRef.current ? 'auto' : 'smooth');
+    }
+  }, [messages]);
 
   const handleScroll = () => {
     const container = scrollContainerRef.current;
@@ -264,6 +264,7 @@ export default function ChatInterface({
       id: assistantMessageId,
       role: 'assistant',
       content: '',
+      reasoning: '',
       timestamp: Date.now(),
     };
 
@@ -314,8 +315,9 @@ export default function ChatInterface({
     }
 
     let accumulatedContent = '';
+    let accumulatedReasoning = '';
     let latestUsage: TokenUsage | null = null;
-    let rawResponseLines: string[] = [];
+    const rawResponseLines: string[] = [];
 
     const request: ChatCompletionRequest = {
       model: conversation.modelIdOverride
@@ -338,6 +340,27 @@ export default function ChatInterface({
         resolvedApiConfig.apiKey,
         request,
         {
+          onReasoning: (chunk) => {
+            accumulatedReasoning += chunk;
+            if (firstTokenTimestamp === null && chunk.length > 0) {
+              firstTokenTimestamp = Date.now();
+            }
+            streamMessages = streamMessages.map((msg) =>
+              msg.id === assistantMessageId
+                ? {
+                  ...msg,
+                  reasoning: accumulatedReasoning,
+                  ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
+                }
+                : msg
+            );
+
+            if (activeConversationIdRef.current === conversationId) {
+              setMessages(streamMessages);
+            }
+
+            persistStreamMessages(conversationId, streamMessages);
+          },
           onMessage: (chunk) => {
             accumulatedContent += chunk;
             if (firstTokenTimestamp === null && chunk.length > 0) {
@@ -348,6 +371,7 @@ export default function ChatInterface({
                 ? {
                   ...msg,
                   content: accumulatedContent,
+                  reasoning: accumulatedReasoning,
                   ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
                 }
                 : msg
@@ -363,7 +387,7 @@ export default function ChatInterface({
             latestUsage = usage;
             streamMessages = streamMessages.map((msg) =>
               msg.id === assistantMessageId
-                ? { ...msg, usage }
+                ? { ...msg, reasoning: accumulatedReasoning, usage }
                 : msg
             );
 
@@ -391,7 +415,11 @@ export default function ChatInterface({
             console.error('Streaming error:', error);
             streamMessages = streamMessages.map((msg) =>
               msg.id === assistantMessageId
-                ? { ...msg, content: `Error: ${error.message}` }
+                ? {
+                  ...msg,
+                  content: `Error: ${error.message}`,
+                  reasoning: accumulatedReasoning,
+                }
                 : msg
             );
 
@@ -415,6 +443,7 @@ export default function ChatInterface({
               {
                 ...assistantMessage,
                 content: accumulatedContent,
+                reasoning: accumulatedReasoning || undefined,
                 rawResponse,
                 usage: latestUsage || undefined,
                 ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),

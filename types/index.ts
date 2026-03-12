@@ -59,6 +59,7 @@ export interface ChatMessage {
   id: string;
   role: 'system' | 'user' | 'assistant';
   content: string;
+  reasoning?: string;
   imageUrl?: string; // For user uploaded images
   rawResponse?: string;
   usage?: TokenUsage;

@@ -1,5 +1,6 @@
 'use client';
 
+import type { ComponentPropsWithoutRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -10,6 +11,7 @@ import 'highlight.js/styles/github-dark.css';
 
 interface MarkdownRendererProps {
   content: string;
+  className?: string;
 }
 
 function isEscaped(text: string, index: number): boolean {
@@ -113,14 +115,19 @@ function normalizeMathDelimiters(source: string): string {
   return output.join('\n');
 }
 
-export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
+export default function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   return (
-    <div className="markdown-body prose prose-invert max-w-none">
+    <div className={`markdown-body prose prose-invert max-w-none ${className}`.trim()}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex, rehypeHighlight]}
         components={{
-          code({ node, inline, className, children, ...props }: any) {
+          code({
+            inline,
+            className,
+            children,
+            ...props
+          }: ComponentPropsWithoutRef<'code'> & { inline?: boolean }) {
             return inline ? (
               <code className="px-1.5 py-0.5 bg-slate-100 text-slate-900 rounded-md text-sm" {...props}>
                 {children}
@@ -131,14 +138,14 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
               </code>
             );
           },
-          pre({ children, ...props }: any) {
+          pre({ children, ...props }: ComponentPropsWithoutRef<'pre'>) {
             return (
               <pre className="bg-slate-900 rounded-lg p-4 overflow-x-auto" {...props}>
                 {children}
               </pre>
             );
           },
-          a({ children, href, ...props }: any) {
+          a({ children, href, ...props }: ComponentPropsWithoutRef<'a'>) {
             return (
               <a
                 href={href}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChatMessage } from '@/types';
 import MarkdownRenderer from './MarkdownRenderer';
 import ImageLightbox from './ImageLightbox';
@@ -21,11 +21,14 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
   const [copied, setCopied] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [isRawOpen, setIsRawOpen] = useState(false);
+  const reasoningContainerRef = useRef<HTMLDivElement>(null);
+  const shouldStickReasoningScrollRef = useRef(true);
 
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const canRegenerate = !isSystem && !!onRegenerate;
   const assistantLabel = assistantName?.trim() || 'Assistant';
+  const reasoning = message.reasoning?.trim() ? message.reasoning : '';
   const promptTokens = message.usage?.prompt_tokens;
   const reasoningTokens = message.usage?.reasoning_tokens;
   const completionTokens = message.usage?.completion_tokens;
@@ -42,6 +45,23 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
       || completionTokens !== undefined
       || latencySeconds !== undefined
     );
+
+  useEffect(() => {
+    const container = reasoningContainerRef.current;
+    if (!container || !reasoning || !shouldStickReasoningScrollRef.current) {
+      return;
+    }
+
+    container.scrollTop = container.scrollHeight;
+  }, [reasoning]);
+
+  const handleReasoningScroll = () => {
+    const container = reasoningContainerRef.current;
+    if (!container) return;
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldStickReasoningScrollRef.current = distanceFromBottom <= 24;
+  };
 
   const copyWithFallback = async (text: string) => {
     if (navigator.clipboard && window.isSecureContext) {
@@ -222,7 +242,26 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
               ) : isUser ? (
                 <div className="whitespace-pre-wrap">{message.content}</div>
               ) : (
-                <MarkdownRenderer content={message.content} />
+                <div className="space-y-3">
+                  {reasoning && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50/80">
+                      <div className="border-b border-amber-200 px-3 py-2 text-xs font-medium tracking-wide text-amber-700">
+                        思考过程
+                      </div>
+                      <div
+                        ref={reasoningContainerRef}
+                        onScroll={handleReasoningScroll}
+                        className="max-h-44 overflow-y-auto px-3 py-2"
+                      >
+                        <MarkdownRenderer
+                          content={reasoning}
+                          className="markdown-body-reasoning"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <MarkdownRenderer content={message.content} />
+                </div>
               )}
               {(showUsage || canShowRawResponse) && (
                 <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-xs text-slate-400">
