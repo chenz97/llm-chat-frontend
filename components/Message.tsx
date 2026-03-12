@@ -244,9 +244,9 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
               ) : (
                 <div className="space-y-3">
                   {reasoning && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50/80">
-                      <div className="border-b border-amber-200 px-3 py-2 text-xs font-medium tracking-wide text-amber-700">
-                        思考过程
+                    <div className="rounded-lg border border-slate-300 bg-slate-100">
+                      <div className="border-b border-slate-300 px-3 py-2 text-xs font-medium tracking-wide text-slate-950">
+                        Reasoning
                       </div>
                       <div
                         ref={reasoningContainerRef}
