@@ -1,14 +1,33 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { Conversation } from '@/types';
 import { getConversations, deleteConversation, setCurrentConversationId } from '@/lib/storage';
-import { MessageSquare, Trash2, Plus } from 'lucide-react';
+import { MessageSquare, Trash2, Plus, Search } from 'lucide-react';
 
 interface ConversationSidebarProps {
   currentConversationId: string | null;
   onSelectConversation: (id: string | null) => void;
   onNewConversation: () => void;
+}
+
+function normalizeSearchText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function matchesConversationSearch(conversation: Conversation, query: string): boolean {
+  const keywords = normalizeSearchText(query).split(/\s+/).filter(Boolean);
+
+  if (keywords.length === 0) {
+    return true;
+  }
+
+  const searchableText = normalizeSearchText([
+    conversation.title,
+    ...conversation.messages.map(message => message.content),
+  ].join(' '));
+
+  return keywords.every(keyword => searchableText.includes(keyword));
 }
 
 export default function ConversationSidebar({
@@ -17,8 +36,10 @@ export default function ConversationSidebar({
   onNewConversation,
 }: ConversationSidebarProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [mounted, setMounted] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isReady, setIsReady] = useState(false);
   const mountedRef = useRef(false);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const loadConversations = useCallback(async () => {
     const convs = await getConversations();
@@ -29,8 +50,15 @@ export default function ConversationSidebar({
 
   useEffect(() => {
     mountedRef.current = true;
-    setMounted(true);
-    void loadConversations();
+
+    const initialize = async () => {
+      await loadConversations();
+      if (mountedRef.current) {
+        setIsReady(true);
+      }
+    };
+
+    void initialize();
 
     const handleStorageChange = () => {
       void loadConversations();
@@ -41,13 +69,17 @@ export default function ConversationSidebar({
       mountedRef.current = false;
       window.removeEventListener('conversationsUpdated', handleStorageChange);
     };
-  }, []);
+  }, [loadConversations]);
 
   useEffect(() => {
-    if (mounted) {
-      void loadConversations();
-    }
-  }, [currentConversationId, loadConversations, mounted]);
+    if (!isReady) return;
+
+    const refreshConversations = async () => {
+      await loadConversations();
+    };
+
+    void refreshConversations();
+  }, [currentConversationId, isReady, loadConversations]);
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -73,7 +105,11 @@ export default function ConversationSidebar({
     void selectConversation();
   };
 
-  if (!mounted) {
+  const filteredConversations = conversations.filter((conversation) =>
+    matchesConversationSearch(conversation, deferredSearchQuery)
+  );
+
+  if (!isReady) {
     return (
       <div className="app-panel w-full flex flex-1 flex-col overflow-hidden lg:h-full">
         <div className="p-4 border-b border-slate-200">
@@ -96,6 +132,18 @@ export default function ConversationSidebar({
           <Plus className="w-4 h-4" />
           New Chat
         </button>
+
+        <div className="relative mt-3">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search conversations"
+            className="w-full rounded-md border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none transition-colors duration-200 placeholder:text-slate-400 focus:border-blue-400"
+            aria-label="Search conversations"
+          />
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4">
@@ -103,9 +151,13 @@ export default function ConversationSidebar({
           <div className="px-4 py-8 text-center text-slate-400 text-base">
             No conversations yet
           </div>
+        ) : filteredConversations.length === 0 ? (
+          <div className="px-4 py-8 text-center text-slate-400 text-base">
+            No matching conversations
+          </div>
         ) : (
           <div className="space-y-1.5">
-            {conversations.map(conv => (
+            {filteredConversations.map(conv => (
               <div
                 key={conv.id}
                 onClick={() => handleSelect(conv.id)}
