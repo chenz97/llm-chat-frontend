@@ -25,6 +25,7 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedApiConfigId, setSelectedApiConfigId] = useState('');
   const [selectedPresetId, setSelectedPresetId] = useState<string | undefined>();
+  const [selectedModelIdOverride, setSelectedModelIdOverride] = useState<string | undefined>();
   const [mounted, setMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCompactLayout, setIsCompactLayout] = useState(false);
@@ -33,6 +34,7 @@ export default function Home() {
   const createConversation = useCallback((
     apiConfigId: string,
     presetId?: string,
+    modelIdOverride?: string,
     options?: { persist?: boolean }
   ) => {
     const newConversation: Conversation = {
@@ -40,6 +42,7 @@ export default function Home() {
       title: 'New Conversation',
       apiConfigId,
       assistantPresetId: presetId,
+      modelIdOverride,
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -57,6 +60,7 @@ export default function Home() {
       setCurrentConversation(newConversation);
       setSelectedApiConfigId(apiConfigId);
       setSelectedPresetId(presetId);
+      setSelectedModelIdOverride(modelIdOverride);
       setIsSidebarOpen(false);
       setIsDraftConversation(!shouldPersist);
     };
@@ -86,12 +90,14 @@ export default function Home() {
 
       let apiConfigIdToUse: string | undefined;
       let presetToUse: string | undefined;
+      let modelIdOverrideToUse: string | undefined;
 
       const storedApiConfig = storedConversation
         ? await getApiConfig(storedConversation.apiConfigId)
         : undefined;
       if (storedConversation && storedApiConfig) {
         apiConfigIdToUse = storedConversation.apiConfigId;
+        modelIdOverrideToUse = storedConversation.modelIdOverride;
         if (storedConversation.assistantPresetId) {
           const preset = await getAssistantPreset(storedConversation.assistantPresetId);
           if (preset) {
@@ -113,6 +119,7 @@ export default function Home() {
           const latestConfig = await getApiConfig(latestConversation.apiConfigId);
           if (latestConfig) {
             apiConfigIdToUse = latestConversation.apiConfigId;
+            modelIdOverrideToUse = latestConversation.modelIdOverride;
           }
           if (latestConversation.assistantPresetId) {
             const preset = await getAssistantPreset(latestConversation.assistantPresetId);
@@ -138,7 +145,7 @@ export default function Home() {
       }
 
       if (!cancelled) {
-        createConversation(apiConfigIdToUse, presetToUse, { persist: false });
+        createConversation(apiConfigIdToUse, presetToUse, modelIdOverrideToUse, { persist: false });
       }
     };
 
@@ -201,6 +208,7 @@ export default function Home() {
   const handleNewConversation = () => {
     const apiConfigIdToUse = currentConversation?.apiConfigId || selectedApiConfigId;
     const presetToUse = currentConversation?.assistantPresetId ?? selectedPresetId;
+    const modelIdOverrideToUse = currentConversation?.modelIdOverride ?? selectedModelIdOverride;
 
     if (!apiConfigIdToUse) {
       alert('Please select an API configuration first');
@@ -208,7 +216,7 @@ export default function Home() {
       return;
     }
 
-    createConversation(apiConfigIdToUse, presetToUse, { persist: false });
+    createConversation(apiConfigIdToUse, presetToUse, modelIdOverrideToUse, { persist: false });
   };
 
   const handleSelectConversation = (id: string | null) => {
@@ -226,6 +234,7 @@ export default function Home() {
         setCurrentConversation(conv);
         setSelectedApiConfigId(conv.apiConfigId);
         setSelectedPresetId(conv.assistantPresetId);
+        setSelectedModelIdOverride(conv.modelIdOverride);
         setIsSidebarOpen(false);
         setIsDraftConversation(false);
       }
@@ -247,16 +256,19 @@ export default function Home() {
       setCurrentConversation(updated);
       setSelectedApiConfigId(updated.apiConfigId);
       setSelectedPresetId(updated.assistantPresetId);
+      setSelectedModelIdOverride(updated.modelIdOverride);
     }
   };
 
   const handleApiConfigChange = (id: string) => {
     setSelectedApiConfigId(id);
+    setSelectedModelIdOverride(undefined);
 
     if (currentConversation) {
       const updated = {
         ...currentConversation,
         apiConfigId: id,
+        modelIdOverride: undefined,
       };
       setCurrentConversation(updated);
       if (!isDraftConversation) {
@@ -279,6 +291,7 @@ export default function Home() {
       const nextApiConfigId = presetProviderId || currentApiConfigId;
 
       setSelectedPresetId(id);
+      setSelectedModelIdOverride(undefined);
 
       if (presetProviderId) {
         setSelectedApiConfigId(presetProviderId);
@@ -289,6 +302,7 @@ export default function Home() {
           ...currentConversation,
           assistantPresetId: id,
           apiConfigId: nextApiConfigId,
+          modelIdOverride: undefined,
         };
         setCurrentConversation(updated);
         if (!isDraftConversation) {
@@ -298,6 +312,21 @@ export default function Home() {
     };
 
     void updatePreset();
+  };
+
+  const handleModelChange = (id: string | undefined) => {
+    setSelectedModelIdOverride(id);
+
+    if (currentConversation) {
+      const updated = {
+        ...currentConversation,
+        modelIdOverride: id,
+      };
+      setCurrentConversation(updated);
+      if (!isDraftConversation) {
+        void saveConversation(updated);
+      }
+    }
   };
 
   const handleSettingsClose = () => {
@@ -330,8 +359,10 @@ export default function Home() {
                 <ConversationConfigSelector
                   selectedApiConfigId={selectedApiConfigId}
                   selectedPresetId={selectedPresetId}
+                  selectedModelIdOverride={selectedModelIdOverride}
                   onApiConfigChange={handleApiConfigChange}
                   onPresetChange={handlePresetChange}
+                  onModelChange={handleModelChange}
                   onOpenSettings={() => setIsSettingsOpen(true)}
                 />
               )}
@@ -364,8 +395,10 @@ export default function Home() {
               <ConversationConfigSelector
                 selectedApiConfigId={selectedApiConfigId}
                 selectedPresetId={selectedPresetId}
+                selectedModelIdOverride={selectedModelIdOverride}
                 onApiConfigChange={handleApiConfigChange}
                 onPresetChange={handlePresetChange}
+                onModelChange={handleModelChange}
                 onOpenSettings={() => setIsSettingsOpen(true)}
               />
             )}

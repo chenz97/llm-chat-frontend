@@ -318,7 +318,10 @@ export default function ChatInterface({
     let rawResponseLines: string[] = [];
 
     const request: ChatCompletionRequest = {
-      model: resolvedPreset?.modelId || resolvedApiConfig.models[0] || 'gpt-3.5-turbo',
+      model: conversation.modelIdOverride
+        || resolvedPreset?.modelId
+        || resolvedApiConfig.models[0]
+        || 'gpt-3.5-turbo',
       messages: apiMessages,
       ...normalizeModelParameters(resolvedPreset?.parameters),
     };

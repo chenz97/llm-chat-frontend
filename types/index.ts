@@ -71,6 +71,7 @@ export interface Conversation {
   title: string;
   apiConfigId: string;
   assistantPresetId?: string;
+  modelIdOverride?: string;
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;

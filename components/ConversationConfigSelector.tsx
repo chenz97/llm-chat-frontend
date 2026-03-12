@@ -8,21 +8,34 @@ import { getApiConfigs, getAssistantPresets } from '@/lib/storage';
 interface ConversationConfigSelectorProps {
   selectedApiConfigId: string;
   selectedPresetId?: string;
+  selectedModelIdOverride?: string;
   onApiConfigChange: (id: string) => void;
   onPresetChange: (id: string | undefined) => void;
+  onModelChange: (id: string | undefined) => void;
   onOpenSettings?: () => void;
 }
 
 export default function ConversationConfigSelector({
   selectedApiConfigId,
   selectedPresetId,
+  selectedModelIdOverride,
   onApiConfigChange,
   onPresetChange,
+  onModelChange,
   onOpenSettings,
 }: ConversationConfigSelectorProps) {
   const [apiConfigs, setApiConfigs] = useState<ApiConfig[]>([]);
   const [presets, setPresets] = useState<AssistantPreset[]>([]);
   const [mounted, setMounted] = useState(false);
+
+  const selectedApiConfig = apiConfigs.find((config) => config.id === selectedApiConfigId);
+  const selectedPreset = presets.find((preset) => preset.id === selectedPresetId);
+  const availableModels = selectedApiConfig?.models || [];
+  const fallbackModelId = selectedPreset?.modelId || availableModels[0] || '';
+  const effectiveModelId = selectedModelIdOverride || fallbackModelId;
+  const modelOptions = effectiveModelId && !availableModels.includes(effectiveModelId)
+    ? [effectiveModelId, ...availableModels]
+    : availableModels;
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +103,14 @@ export default function ConversationConfigSelector({
             <option value="">Loading...</option>
           </select>
         </div>
+        <div>
+          <label className="block text-base font-medium text-slate-700 mb-1.5">
+            Model ID
+          </label>
+          <select className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm" disabled>
+            <option value="">Loading...</option>
+          </select>
+        </div>
       </div>
     </div>
   );
@@ -144,6 +165,35 @@ export default function ConversationConfigSelector({
                 {preset.name} - {preset.modelId}
               </option>
             ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="model-select" className="block text-base font-medium text-slate-700 mb-1.5">
+            Model ID
+          </label>
+          <select
+            id="model-select"
+            value={effectiveModelId}
+            onChange={(e) => {
+              const nextModelId = e.target.value || undefined;
+              onModelChange(nextModelId && nextModelId !== fallbackModelId ? nextModelId : undefined);
+            }}
+            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-slate-300 transition-colors duration-200"
+            disabled={modelOptions.length === 0}
+          >
+            {modelOptions.length === 0 ? (
+              <option value="">No models available</option>
+            ) : (
+              modelOptions.map((modelId, index) => (
+                <option key={`${modelId}-${index}`} value={modelId}>
+                  {modelId}
+                  {index === 0 && modelId === effectiveModelId && !availableModels.includes(modelId)
+                    ? ' (current)'
+                    : ''}
+                </option>
+              ))
+            )}
           </select>
         </div>
       </div>
