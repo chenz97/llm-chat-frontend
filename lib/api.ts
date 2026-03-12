@@ -1,4 +1,11 @@
-import { Message, ChatCompletionRequest, TokenUsage } from '@/types';
+import {
+  Message,
+  ChatCompletionRequest,
+  TokenUsage,
+  ReasoningDetail,
+  ProviderMetadata,
+  ChatMessage,
+} from '@/types';
 
 const VERCEL_PROXY_ENDPOINT = '/api/chat/completions';
 
@@ -10,10 +17,17 @@ export interface StreamOptions {
 export interface StreamCallbacks {
   onMessage: (chunk: string) => void;
   onReasoning?: (chunk: string) => void;
+  onReasoningDetails?: (details: ReasoningDetail[]) => void;
   onError: (error: Error) => void;
   onComplete: () => void;
   onUsage?: (usage: TokenUsage) => void;
+  onResponseMetadata?: (metadata: Partial<ProviderMetadata>) => void;
   onRawEvent?: (rawLine: string) => void;
+}
+
+interface UsageExtraction {
+  usage: TokenUsage;
+  usageDetails?: Record<string, unknown>;
 }
 
 function coerceNumber(value: unknown): number | undefined {
@@ -28,7 +42,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return null;
 }
 
-function extractUsage(data: unknown): TokenUsage | null {
+function extractUsage(data: unknown): UsageExtraction | null {
   const record = asRecord(data);
   if (!record) return null;
 
@@ -37,23 +51,63 @@ function extractUsage(data: unknown): TokenUsage | null {
 
   const promptTokens = coerceNumber(usage.prompt_tokens);
   const completionTokens = coerceNumber(usage.completion_tokens);
+  const promptTokensDetails = asRecord(usage.prompt_tokens_details);
   const completionTokensDetails = asRecord(usage.completion_tokens_details);
   const reasoningTokens = coerceNumber(
     usage.reasoning_tokens ?? completionTokensDetails?.reasoning_tokens
+  );
+  const cachedTokens = coerceNumber(
+    usage.cached_tokens
+    ?? usage.cache_read_input_tokens
+    ?? promptTokensDetails?.cached_tokens
+  );
+  const cacheReadInputTokens = coerceNumber(
+    usage.cache_read_input_tokens
+    ?? usage.cache_read_tokens
+    ?? promptTokensDetails?.cached_tokens
+  );
+  const cacheCreationInputTokens = coerceNumber(
+    usage.cache_creation_input_tokens
+    ?? usage.cache_write_input_tokens
+    ?? usage.cache_write_tokens
   );
 
   if (
     promptTokens === undefined
     && completionTokens === undefined
     && reasoningTokens === undefined
+    && cachedTokens === undefined
+    && cacheReadInputTokens === undefined
+    && cacheCreationInputTokens === undefined
   ) {
     return null;
   }
 
+  const usageDetails: Record<string, unknown> = {};
+  const detailKeys = [
+    'prompt_tokens_details',
+    'completion_tokens_details',
+    'input_tokens_details',
+    'output_tokens_details',
+  ];
+
+  for (const key of detailKeys) {
+    const detail = asRecord(usage[key]);
+    if (detail) {
+      usageDetails[key] = detail;
+    }
+  }
+
   return {
-    prompt_tokens: promptTokens,
-    reasoning_tokens: reasoningTokens,
-    completion_tokens: completionTokens,
+    usage: {
+      prompt_tokens: promptTokens,
+      reasoning_tokens: reasoningTokens,
+      completion_tokens: completionTokens,
+      cached_tokens: cachedTokens,
+      cache_read_input_tokens: cacheReadInputTokens,
+      cache_creation_input_tokens: cacheCreationInputTokens,
+    },
+    usageDetails: Object.keys(usageDetails).length > 0 ? usageDetails : undefined,
   };
 }
 
@@ -83,6 +137,15 @@ function extractTextValue(value: unknown): string {
 }
 
 function extractReasoningChunk(data: unknown): string {
+  const reasoningDetails = extractReasoningDetailsChunk(data);
+  const reasoningFromDetails = reasoningDetails
+    .map(detail => extractTextValue(detail))
+    .join('');
+
+  if (reasoningFromDetails) {
+    return reasoningFromDetails;
+  }
+
   const record = asRecord(data);
   const choices = Array.isArray(record?.choices) ? record.choices : [];
   const firstChoice = asRecord(choices[0]);
@@ -90,17 +153,6 @@ function extractReasoningChunk(data: unknown): string {
 
   if (!delta) {
     return '';
-  }
-
-  const reasoningDetails = Array.isArray(delta.reasoning_details)
-    ? delta.reasoning_details
-    : [];
-  const reasoningFromDetails = reasoningDetails
-    .map(detail => extractTextValue(detail))
-    .join('');
-
-  if (reasoningFromDetails) {
-    return reasoningFromDetails;
   }
 
   const fallbackFields = [
@@ -123,6 +175,21 @@ function extractReasoningChunk(data: unknown): string {
   return '';
 }
 
+function extractReasoningDetailsChunk(data: unknown): ReasoningDetail[] {
+  const record = asRecord(data);
+  const choices = Array.isArray(record?.choices) ? record.choices : [];
+  const firstChoice = asRecord(choices[0]);
+  const delta = asRecord(firstChoice?.delta);
+
+  if (!delta || !Array.isArray(delta.reasoning_details)) {
+    return [];
+  }
+
+  return delta.reasoning_details
+    .map(detail => asRecord(detail))
+    .filter((detail): detail is ReasoningDetail => detail !== null);
+}
+
 function extractContentChunk(data: unknown): string {
   const record = asRecord(data);
   const choices = Array.isArray(record?.choices) ? record.choices : [];
@@ -130,6 +197,25 @@ function extractContentChunk(data: unknown): string {
   const delta = asRecord(firstChoice?.delta);
 
   return extractTextValue(delta?.content);
+}
+
+function extractResponseMetadata(data: unknown): Partial<ProviderMetadata> | null {
+  const record = asRecord(data);
+  if (!record) {
+    return null;
+  }
+
+  const provider = typeof record.provider === 'string' ? record.provider : undefined;
+  const usageExtraction = extractUsage(data);
+
+  if (!provider && !usageExtraction?.usageDetails) {
+    return null;
+  }
+
+  return {
+    ...(provider ? { provider } : {}),
+    ...(usageExtraction?.usageDetails ? { usageDetails: usageExtraction.usageDetails } : {}),
+  };
 }
 
 export async function streamChatCompletion(
@@ -215,6 +301,11 @@ export async function streamChatCompletion(
             const jsonStr = trimmedLine.slice(6);
             const data: unknown = JSON.parse(jsonStr);
 
+            const reasoningDetails = extractReasoningDetailsChunk(data);
+            if (reasoningDetails.length > 0) {
+              callbacks.onReasoningDetails?.(reasoningDetails);
+            }
+
             const reasoning = extractReasoningChunk(data);
             if (reasoning) {
               onReasoning?.(reasoning);
@@ -225,9 +316,14 @@ export async function streamChatCompletion(
               onMessage(content);
             }
 
-            const usage = extractUsage(data);
-            if (usage) {
-              callbacks.onUsage?.(usage);
+            const usageExtraction = extractUsage(data);
+            if (usageExtraction) {
+              callbacks.onUsage?.(usageExtraction.usage);
+            }
+
+            const metadata = extractResponseMetadata(data);
+            if (metadata) {
+              callbacks.onResponseMetadata?.(metadata);
             }
           } catch (e) {
             console.error('Error parsing SSE data:', e, trimmedLine);
@@ -257,7 +353,7 @@ function resolveChatCompletionsEndpoint(baseUrl: string): string {
 }
 
 export function convertToOpenAIMessages(
-  messages: Array<{ role: string; content: string; imageUrl?: string }>
+  messages: ChatMessage[]
 ): Message[] {
   return messages.map(msg => {
     if (msg.role === 'user' && msg.imageUrl) {
@@ -273,9 +369,15 @@ export function convertToOpenAIMessages(
       };
     }
 
-    return {
+    const message: Message = {
       role: msg.role as 'system' | 'user' | 'assistant',
       content: msg.content
     };
+
+    if (msg.role === 'assistant' && Array.isArray(msg.reasoningDetails) && msg.reasoningDetails.length > 0) {
+      message.reasoning_details = msg.reasoningDetails;
+    }
+
+    return message;
   });
 }

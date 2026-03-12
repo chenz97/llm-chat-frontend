@@ -2,6 +2,7 @@
 export interface Message {
   role: 'system' | 'user' | 'assistant';
   content: string | MessageContent[];
+  reasoning_details?: ReasoningDetail[];
 }
 
 export interface MessageContent {
@@ -16,7 +17,17 @@ export interface ChatCompletionRequest {
   model: string;
   messages: Message[];
   stream?: boolean;
-  [key: string]: any; // For additional model parameters
+  [key: string]: unknown; // For additional model parameters
+}
+
+export interface ReasoningDetail {
+  [key: string]: unknown;
+}
+
+export interface ProviderMetadata {
+  provider?: string;
+  cacheControl?: unknown;
+  usageDetails?: Record<string, unknown>;
 }
 
 // App Types
@@ -35,7 +46,7 @@ export interface ModelParameters {
   top_p?: number;
   frequency_penalty?: number;
   presence_penalty?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface AssistantPreset {
@@ -53,6 +64,9 @@ export interface TokenUsage {
   prompt_tokens?: number;
   reasoning_tokens?: number;
   completion_tokens?: number;
+  cached_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
 }
 
 export interface ChatMessage {
@@ -60,9 +74,11 @@ export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
   reasoning?: string;
+  reasoningDetails?: ReasoningDetail[];
   imageUrl?: string; // For user uploaded images
   rawResponse?: string;
   usage?: TokenUsage;
+  providerMetadata?: ProviderMetadata;
   timestamp: number;
   firstTokenTimestamp?: number;
 }

@@ -9,6 +9,8 @@ import {
   TokenUsage,
   ChatCompletionRequest,
   ModelParameters,
+  ProviderMetadata,
+  ReasoningDetail,
 } from '@/types';
 import {
   saveConversation,
@@ -46,6 +48,22 @@ const normalizeModelParameters = (parameters?: ModelParameters): ModelParameters
   return Object.fromEntries(
     Object.entries(parameters).map(([key, value]) => [key, parseParameterValue(value)])
   ) as ModelParameters;
+};
+
+const mergeProviderMetadata = (
+  current: ProviderMetadata | undefined,
+  next: Partial<ProviderMetadata>
+): ProviderMetadata => {
+  const usageDetails = {
+    ...(current?.usageDetails ?? {}),
+    ...(next.usageDetails ?? {}),
+  };
+
+  return {
+    ...current,
+    ...next,
+    ...(Object.keys(usageDetails).length > 0 ? { usageDetails } : {}),
+  };
 };
 
 export default function ChatInterface({
@@ -265,6 +283,7 @@ export default function ChatInterface({
       role: 'assistant',
       content: '',
       reasoning: '',
+      providerMetadata: undefined,
       timestamp: Date.now(),
     };
 
@@ -334,6 +353,11 @@ export default function ChatInterface({
       include_usage: true,
     };
 
+    let accumulatedReasoningDetails: ReasoningDetail[] = [];
+    let accumulatedProviderMetadata: ProviderMetadata | undefined = request.cache_control !== undefined
+      ? { cacheControl: request.cache_control }
+      : undefined;
+
     try {
       await streamChatCompletion(
         resolvedApiConfig.baseUrl,
@@ -361,6 +385,23 @@ export default function ChatInterface({
 
             persistStreamMessages(conversationId, streamMessages);
           },
+          onReasoningDetails: (details) => {
+            accumulatedReasoningDetails = accumulatedReasoningDetails.concat(details);
+            streamMessages = streamMessages.map((msg) =>
+              msg.id === assistantMessageId
+                ? {
+                  ...msg,
+                  reasoningDetails: accumulatedReasoningDetails,
+                }
+                : msg
+            );
+
+            if (activeConversationIdRef.current === conversationId) {
+              setMessages(streamMessages);
+            }
+
+            persistStreamMessages(conversationId, streamMessages);
+          },
           onMessage: (chunk) => {
             accumulatedContent += chunk;
             if (firstTokenTimestamp === null && chunk.length > 0) {
@@ -372,6 +413,8 @@ export default function ChatInterface({
                   ...msg,
                   content: accumulatedContent,
                   reasoning: accumulatedReasoning,
+                  reasoningDetails: accumulatedReasoningDetails,
+                  providerMetadata: accumulatedProviderMetadata,
                   ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
                 }
                 : msg
@@ -387,7 +430,30 @@ export default function ChatInterface({
             latestUsage = usage;
             streamMessages = streamMessages.map((msg) =>
               msg.id === assistantMessageId
-                ? { ...msg, reasoning: accumulatedReasoning, usage }
+                ? {
+                  ...msg,
+                  reasoning: accumulatedReasoning,
+                  reasoningDetails: accumulatedReasoningDetails,
+                  usage,
+                  providerMetadata: accumulatedProviderMetadata,
+                }
+                : msg
+            );
+
+            if (activeConversationIdRef.current === conversationId) {
+              setMessages(streamMessages);
+            }
+
+            persistStreamMessages(conversationId, streamMessages);
+          },
+          onResponseMetadata: (metadata) => {
+            accumulatedProviderMetadata = mergeProviderMetadata(accumulatedProviderMetadata, metadata);
+            streamMessages = streamMessages.map((msg) =>
+              msg.id === assistantMessageId
+                ? {
+                  ...msg,
+                  providerMetadata: accumulatedProviderMetadata,
+                }
                 : msg
             );
 
@@ -419,6 +485,8 @@ export default function ChatInterface({
                   ...msg,
                   content: `Error: ${error.message}`,
                   reasoning: accumulatedReasoning,
+                  reasoningDetails: accumulatedReasoningDetails,
+                  providerMetadata: accumulatedProviderMetadata,
                 }
                 : msg
             );
@@ -444,8 +512,12 @@ export default function ChatInterface({
                 ...assistantMessage,
                 content: accumulatedContent,
                 reasoning: accumulatedReasoning || undefined,
+                reasoningDetails: accumulatedReasoningDetails.length > 0
+                  ? accumulatedReasoningDetails
+                  : undefined,
                 rawResponse,
                 usage: latestUsage || undefined,
+                providerMetadata: accumulatedProviderMetadata,
                 ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
               },
             ];

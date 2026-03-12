@@ -32,6 +32,9 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
   const promptTokens = message.usage?.prompt_tokens;
   const reasoningTokens = message.usage?.reasoning_tokens;
   const completionTokens = message.usage?.completion_tokens;
+  const cachedTokens = message.usage?.cached_tokens;
+  const cacheReadInputTokens = message.usage?.cache_read_input_tokens;
+  const cacheCreationInputTokens = message.usage?.cache_creation_input_tokens;
   const latencySeconds = message.firstTokenTimestamp !== undefined
     && message.firstTokenTimestamp >= message.timestamp
     ? (message.firstTokenTimestamp - message.timestamp) / 1000
@@ -43,8 +46,20 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
       promptTokens !== undefined
       || reasoningTokens !== undefined
       || completionTokens !== undefined
+      || cachedTokens !== undefined
+      || cacheReadInputTokens !== undefined
+      || cacheCreationInputTokens !== undefined
       || latencySeconds !== undefined
     );
+  const usageParts = [
+    `prompt ${promptTokens ?? '-'}`,
+    ...(cachedTokens !== undefined ? [`cached ${cachedTokens}`] : []),
+    ...(cacheReadInputTokens !== undefined ? [`cache read ${cacheReadInputTokens}`] : []),
+    ...(cacheCreationInputTokens !== undefined ? [`cache write ${cacheCreationInputTokens}`] : []),
+    `reasoning ${reasoningTokens ?? '-'}`,
+    `completion ${completionTokens ?? '-'}`,
+    ...(latencySeconds !== undefined ? [`latency ${latencySeconds.toFixed(1)}s`] : []),
+  ];
 
   useEffect(() => {
     const container = reasoningContainerRef.current;
@@ -267,8 +282,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
                 <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-xs text-slate-400">
                   {showUsage && (
                     <span>
-                      prompt {promptTokens ?? '-'} | reasoning {reasoningTokens ?? '-'} | completion {completionTokens ?? '-'}
-                      {latencySeconds !== undefined ? ` | latency ${latencySeconds.toFixed(1)}s` : ''}
+                      {usageParts.join(' | ')}
                     </span>
                   )}
                   {canShowRawResponse && (

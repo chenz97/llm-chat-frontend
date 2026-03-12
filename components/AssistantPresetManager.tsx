@@ -237,6 +237,26 @@ export default function AssistantPresetManager() {
     setFormData({ ...formData, parameters: params });
   };
 
+  const formatParameterValue = (value: unknown) => {
+    if (typeof value === 'string' || typeof value === 'number') {
+      return String(value);
+    }
+
+    if (typeof value === 'boolean') {
+      return value ? 'true' : 'false';
+    }
+
+    if (value === null || value === undefined) {
+      return '';
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  };
+
   const modelOptions = resolveModelsForProvider(formData.apiConfigId);
 
   return (
@@ -344,7 +364,7 @@ export default function AssistantPresetManager() {
                       />
                       <input
                         type="text"
-                        value={value}
+                        value={formatParameterValue(value)}
                         onChange={(e) => updateParameter(key, e.target.value)}
                         className="w-full min-w-0 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
                       />
@@ -454,7 +474,7 @@ export default function AssistantPresetManager() {
                             key={key}
                             className="px-2.5 py-1 bg-blue-100 text-blue-700 text-sm rounded-md border border-blue-200 break-all"
                           >
-                            {key}: {value}
+                            {key}: {formatParameterValue(value)}
                           </span>
                         ))}
                       </div>
@@ -562,7 +582,7 @@ export default function AssistantPresetManager() {
                     />
                     <input
                       type="text"
-                      value={value}
+                      value={formatParameterValue(value)}
                       onChange={(e) => updateParameter(key, e.target.value)}
                       className="w-full min-w-0 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
                     />
