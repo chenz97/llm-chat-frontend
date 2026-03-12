@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AssistantPreset, ApiConfig } from '@/types';
 import {
   getAssistantPresets,
@@ -24,6 +24,8 @@ export default function AssistantPresetManager() {
   const [mounted, setMounted] = useState(false);
   const [defaultPresetId, setDefaultPresetIdState] = useState<string | null>(null);
   const [migrationNotice, setMigrationNotice] = useState<string | null>(null);
+  const pendingScrollIdRef = useRef<string | null>(null);
+  const newPresetRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +82,23 @@ export default function AssistantPresetManager() {
     return () => window.clearTimeout(timer);
   }, [migrationNotice]);
 
+  useEffect(() => {
+    if (!editing || pendingScrollIdRef.current !== editing || !newPresetRef.current) {
+      return;
+    }
+
+    const scrollTarget = newPresetRef.current;
+    const frameId = window.requestAnimationFrame(() => {
+      scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+
+    pendingScrollIdRef.current = null;
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [editing]);
+
   if (!mounted) {
     return null;
   }
@@ -122,6 +141,7 @@ export default function AssistantPresetManager() {
       useVercelServerProxy: false,
       createdAt: Date.now(),
     };
+    pendingScrollIdRef.current = newPreset.id;
     setEditing(newPreset.id);
     setFormData(newPreset);
   };
@@ -472,7 +492,10 @@ export default function AssistantPresetManager() {
         ))}
 
         {editing && !presets.find(p => p.id === editing) && (
-          <div className="app-panel p-4 sm:p-5">
+          <div
+            ref={newPresetRef}
+            className="app-panel p-4 sm:p-5"
+          >
             <div className="space-y-3">
               <input
                 type="text"

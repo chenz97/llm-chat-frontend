@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ApiConfig } from '@/types';
 import { getApiConfigs, saveApiConfig, deleteApiConfig, generateId } from '@/lib/storage';
 import { Plus, Trash2, Edit2, Check, X } from 'lucide-react';
@@ -11,6 +11,8 @@ export default function ApiConfigManager() {
   const [formData, setFormData] = useState<Partial<ApiConfig>>({});
   const [modelsInput, setModelsInput] = useState('');
   const [mounted, setMounted] = useState(false);
+  const pendingScrollIdRef = useRef<string | null>(null);
+  const newConfigRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +32,23 @@ export default function ApiConfigManager() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!editing || pendingScrollIdRef.current !== editing || !newConfigRef.current) {
+      return;
+    }
+
+    const scrollTarget = newConfigRef.current;
+    const frameId = window.requestAnimationFrame(() => {
+      scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+
+    pendingScrollIdRef.current = null;
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [editing]);
+
   if (!mounted) {
     return null;
   }
@@ -43,6 +62,7 @@ export default function ApiConfigManager() {
       models: [],
       createdAt: Date.now(),
     };
+    pendingScrollIdRef.current = newConfig.id;
     setEditing(newConfig.id);
     setFormData(newConfig);
     setModelsInput('');
@@ -216,7 +236,10 @@ export default function ApiConfigManager() {
         ))}
 
         {editing && !configs.find(c => c.id === editing) && (
-          <div className="app-panel p-4 sm:p-5">
+          <div
+            ref={newConfigRef}
+            className="app-panel p-4 sm:p-5"
+          >
             <div className="space-y-3">
               <input
                 type="text"
