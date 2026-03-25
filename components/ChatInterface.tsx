@@ -483,7 +483,7 @@ export default function ChatInterface({
               msg.id === assistantMessageId
                 ? {
                   ...msg,
-                  content: `Error: ${error.message}`,
+                  content: error.message,
                   reasoning: accumulatedReasoning,
                   reasoningDetails: accumulatedReasoningDetails,
                   providerMetadata: accumulatedProviderMetadata,

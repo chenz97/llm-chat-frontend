@@ -6,6 +6,7 @@ import {
   ProviderMetadata,
   ChatMessage,
 } from '@/types';
+import { normalizeError } from '@/lib/errorUtils';
 
 const VERCEL_PROXY_ENDPOINT = '/api/chat/completions';
 
@@ -337,7 +338,7 @@ export async function streamChatCompletion(
       return;
     }
 
-    onError(error instanceof Error ? error : new Error(String(error)));
+    onError(normalizeError(error));
   }
 }
 

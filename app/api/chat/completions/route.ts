@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ChatCompletionRequest } from '@/types';
+import { extractErrorMessage } from '@/lib/errorUtils';
 
 interface ProxyRequestBody {
   baseUrl?: unknown;
@@ -77,7 +78,7 @@ export async function POST(nextRequest: NextRequest): Promise<Response> {
       return new Response('Request aborted', { status: 499 });
     }
 
-    const message = error instanceof Error ? error.message : String(error);
+    const message = extractErrorMessage(error);
     return new Response(message, {
       status: 500,
       headers: {
