@@ -1,0 +1,7 @@
+  {
+    "model": "anthropic/claude-opus-4.",
+    "messages": [
+      { "role": "user", "content": "hi there" }
+    ],
+    "reasoning": {"enabled": true}
+  }

@@ -40,6 +40,15 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
     ? (message.firstTokenTimestamp - message.timestamp) / 1000
     : undefined;
   const canShowRawResponse = !isUser && !isSystem && !!message.rawResponse;
+  const streamNotice = !isUser && !isSystem
+    ? (
+      message.streamState === 'error'
+        ? (message.streamError || '流式输出已中断，已保留已生成内容。')
+        : message.streamState === 'stopped'
+          ? (message.streamError || '已停止生成，已保留已生成内容。')
+          : null
+    )
+    : null;
   const showUsage = !isUser
     && !isSystem
     && (
@@ -275,7 +284,20 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
                       </div>
                     </div>
                   )}
-                  <MarkdownRenderer content={message.content} />
+                  {message.content.trim() ? (
+                    <MarkdownRenderer content={message.content} />
+                  ) : streamNotice || message.streamState === 'streaming' ? null : (
+                    <div className="text-slate-400 text-sm">No content</div>
+                  )}
+                  {streamNotice && (
+                    <div className={`rounded-lg border px-3 py-2 text-sm ${
+                      message.streamState === 'error'
+                        ? 'border-amber-200 bg-amber-50 text-amber-900'
+                        : 'border-slate-200 bg-slate-50 text-slate-700'
+                    }`}>
+                      {streamNotice}
+                    </div>
+                  )}
                 </div>
               )}
               {(showUsage || canShowRawResponse) && (

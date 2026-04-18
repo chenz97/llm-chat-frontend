@@ -85,7 +85,9 @@ export default function ChatInterface({
   const previousConversationIdRef = useRef<string | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
   const streamingConversationIdRef = useRef<string | null>(null);
+  const streamingAssistantMessageIdRef = useRef<string | null>(null);
   const isStreamingRef = useRef(false);
+  const streamWasBackgroundedRef = useRef(false);
   const lastPersistAtRef = useRef(0);
   const persistTimerRef = useRef<number | null>(null);
   const pendingPersistRef = useRef<{ id: string; messages: ChatMessage[] } | null>(null);
@@ -190,6 +192,14 @@ export default function ChatInterface({
     scrollToBottom('auto');
   };
 
+  const updateMessageById = (
+    currentMessages: ChatMessage[],
+    messageId: string,
+    updater: (message: ChatMessage) => ChatMessage
+  ) => currentMessages.map((message) => (
+    message.id === messageId ? updater(message) : message
+  ));
+
   const flushPendingPersist = async () => {
     const pending = pendingPersistRef.current;
     if (!pending) {
@@ -220,7 +230,7 @@ export default function ChatInterface({
     }
   };
 
-  const clearPersistTimer = () => {
+  const clearPersistQueue = () => {
     if (persistTimerRef.current !== null) {
       window.clearTimeout(persistTimerRef.current);
       persistTimerRef.current = null;
@@ -228,28 +238,86 @@ export default function ChatInterface({
     pendingPersistRef.current = null;
   };
 
-  const stopStreaming = () => {
-    abortControllerRef.current?.abort();
+  const resetStreamingState = () => {
     abortControllerRef.current = null;
     isStreamingRef.current = false;
     streamingConversationIdRef.current = null;
-    clearPersistTimer();
+    streamingAssistantMessageIdRef.current = null;
+    streamWasBackgroundedRef.current = false;
+  };
 
-    if (conversation) {
-      const finalize = async () => {
-        const didSave = await updateConversationMessages(conversation.id, messagesRef.current);
-        if (didSave) {
-          await onConversationUpdate(conversation.id);
-        }
-        window.dispatchEvent(new Event('conversationsUpdated'));
+  const persistFinalConversation = async (
+    conversationToPersist: Conversation,
+    conversationId: string
+  ) => {
+    const didSave = await saveConversation(conversationToPersist);
+    if (didSave) {
+      await onConversationUpdate(conversationId);
+    }
+    window.dispatchEvent(new Event('conversationsUpdated'));
+  };
+
+  const stopStreaming = (reason: 'stopped' | 'error' = 'stopped', streamError?: string) => {
+    abortControllerRef.current?.abort();
+    clearPersistQueue();
+
+    if (conversation && streamingAssistantMessageIdRef.current) {
+      const finalMessages = updateMessageById(
+        messagesRef.current,
+        streamingAssistantMessageIdRef.current,
+        (message) => ({
+          ...message,
+          streamState: reason,
+          streamError,
+        })
+      );
+
+      messagesRef.current = finalMessages;
+      if (activeConversationIdRef.current === conversation.id) {
+        setMessages(finalMessages);
+      }
+
+      const updatedConversation: Conversation = {
+        ...conversation,
+        messages: finalMessages,
+        updatedAt: Date.now(),
       };
-      void finalize();
+
+      resetStreamingState();
+      void persistFinalConversation(updatedConversation, conversation.id);
+    } else {
+      resetStreamingState();
     }
 
     if (activeConversationIdRef.current === conversation?.id) {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const flushForBackground = () => {
+      if (!isStreamingRef.current) {
+        return;
+      }
+
+      streamWasBackgroundedRef.current = true;
+      void flushPendingPersist();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushForBackground();
+      }
+    };
+
+    window.addEventListener('pagehide', flushForBackground);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('pagehide', flushForBackground);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const resolveTitle = (baseMessages: ChatMessage[], titleSeed?: string) => {
     if (!conversation || conversation.title !== 'New Conversation') {
@@ -284,6 +352,7 @@ export default function ChatInterface({
       content: '',
       reasoning: '',
       providerMetadata: undefined,
+      streamState: 'streaming',
       timestamp: Date.now(),
     };
 
@@ -292,11 +361,15 @@ export default function ChatInterface({
 
     setIsLoading(true);
     streamingConversationIdRef.current = conversationId;
+    streamingAssistantMessageIdRef.current = assistantMessageId;
     isStreamingRef.current = true;
+    streamWasBackgroundedRef.current = false;
 
     if (activeConversationIdRef.current === conversationId) {
       setMessages(streamMessages);
     }
+
+    messagesRef.current = streamMessages;
 
     const pendingConversation: Conversation = {
       ...conversation,
@@ -322,6 +395,14 @@ export default function ChatInterface({
 
     if (resolvedPreset && (!assistantPreset || assistantPreset.id !== resolvedPreset.id)) {
       setAssistantPreset(resolvedPreset);
+    }
+
+    if (
+      !isStreamingRef.current
+      || streamingConversationIdRef.current !== conversationId
+      || streamingAssistantMessageIdRef.current !== assistantMessageId
+    ) {
+      return;
     }
 
     const apiMessages = convertToOpenAIMessages(baseMessages);
@@ -358,6 +439,72 @@ export default function ChatInterface({
       ? { cacheControl: request.cache_control }
       : undefined;
 
+    const rawResponse = () => rawResponseLines.length > 0
+      ? rawResponseLines.join('\n')
+      : undefined;
+
+    const updateStreamingAssistant = (updater: (message: ChatMessage) => ChatMessage) => {
+      streamMessages = updateMessageById(streamMessages, assistantMessageId, updater);
+      messagesRef.current = streamMessages;
+
+      if (activeConversationIdRef.current === conversationId) {
+        setMessages(streamMessages);
+      }
+
+      persistStreamMessages(conversationId, streamMessages);
+    };
+
+    const buildFinalAssistantMessage = (
+      streamState?: ChatMessage['streamState'],
+      streamError?: string
+    ): ChatMessage => ({
+      ...assistantMessage,
+      content: accumulatedContent,
+      reasoning: accumulatedReasoning || undefined,
+      reasoningDetails: accumulatedReasoningDetails.length > 0
+        ? accumulatedReasoningDetails
+        : undefined,
+      rawResponse: rawResponse(),
+      usage: latestUsage || undefined,
+      providerMetadata: accumulatedProviderMetadata,
+      ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
+      ...(streamState ? { streamState } : {}),
+      ...(streamError ? { streamError } : {}),
+    });
+
+    const finalizeStream = async (
+      finalAssistantMessage: ChatMessage,
+      shouldAbortActiveRequest = false
+    ) => {
+      if (shouldAbortActiveRequest) {
+        abortControllerRef.current?.abort();
+      }
+
+      clearPersistQueue();
+
+      const finalMessages = [
+        ...baseMessages,
+        finalAssistantMessage,
+      ];
+      messagesRef.current = finalMessages;
+
+      if (activeConversationIdRef.current === conversationId) {
+        setMessages(finalMessages);
+        setIsLoading(false);
+      }
+
+      resetStreamingState();
+
+      const updatedConversation: Conversation = {
+        ...conversation,
+        messages: finalMessages,
+        title: resolveTitle(baseMessages, titleSeed),
+        updatedAt: Date.now(),
+      };
+
+      await persistFinalConversation(updatedConversation, conversationId);
+    };
+
     try {
       await streamChatCompletion(
         resolvedApiConfig.baseUrl,
@@ -369,184 +516,77 @@ export default function ChatInterface({
             if (firstTokenTimestamp === null && chunk.length > 0) {
               firstTokenTimestamp = Date.now();
             }
-            streamMessages = streamMessages.map((msg) =>
-              msg.id === assistantMessageId
-                ? {
-                  ...msg,
-                  reasoning: accumulatedReasoning,
-                  ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
-                }
-                : msg
-            );
-
-            if (activeConversationIdRef.current === conversationId) {
-              setMessages(streamMessages);
-            }
-
-            persistStreamMessages(conversationId, streamMessages);
+            updateStreamingAssistant((message) => ({
+              ...message,
+              reasoning: accumulatedReasoning,
+              streamState: 'streaming',
+              streamError: undefined,
+              ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
+            }));
           },
           onReasoningDetails: (details) => {
             accumulatedReasoningDetails = accumulatedReasoningDetails.concat(details);
-            streamMessages = streamMessages.map((msg) =>
-              msg.id === assistantMessageId
-                ? {
-                  ...msg,
-                  reasoningDetails: accumulatedReasoningDetails,
-                }
-                : msg
-            );
-
-            if (activeConversationIdRef.current === conversationId) {
-              setMessages(streamMessages);
-            }
-
-            persistStreamMessages(conversationId, streamMessages);
+            updateStreamingAssistant((message) => ({
+              ...message,
+              reasoningDetails: accumulatedReasoningDetails,
+              streamState: 'streaming',
+              streamError: undefined,
+            }));
           },
           onMessage: (chunk) => {
             accumulatedContent += chunk;
             if (firstTokenTimestamp === null && chunk.length > 0) {
               firstTokenTimestamp = Date.now();
             }
-            streamMessages = streamMessages.map((msg) =>
-              msg.id === assistantMessageId
-                ? {
-                  ...msg,
-                  content: accumulatedContent,
-                  reasoning: accumulatedReasoning,
-                  reasoningDetails: accumulatedReasoningDetails,
-                  providerMetadata: accumulatedProviderMetadata,
-                  ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
-                }
-                : msg
-            );
-
-            if (activeConversationIdRef.current === conversationId) {
-              setMessages(streamMessages);
-            }
-
-            persistStreamMessages(conversationId, streamMessages);
+            updateStreamingAssistant((message) => ({
+              ...message,
+              content: accumulatedContent,
+              reasoning: accumulatedReasoning,
+              reasoningDetails: accumulatedReasoningDetails,
+              providerMetadata: accumulatedProviderMetadata,
+              streamState: 'streaming',
+              streamError: undefined,
+              ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
+            }));
           },
           onUsage: (usage) => {
             latestUsage = usage;
-            streamMessages = streamMessages.map((msg) =>
-              msg.id === assistantMessageId
-                ? {
-                  ...msg,
-                  reasoning: accumulatedReasoning,
-                  reasoningDetails: accumulatedReasoningDetails,
-                  usage,
-                  providerMetadata: accumulatedProviderMetadata,
-                }
-                : msg
-            );
-
-            if (activeConversationIdRef.current === conversationId) {
-              setMessages(streamMessages);
-            }
-
-            persistStreamMessages(conversationId, streamMessages);
+            updateStreamingAssistant((message) => ({
+              ...message,
+              reasoning: accumulatedReasoning,
+              reasoningDetails: accumulatedReasoningDetails,
+              usage,
+              providerMetadata: accumulatedProviderMetadata,
+              streamState: 'streaming',
+              streamError: undefined,
+            }));
           },
           onResponseMetadata: (metadata) => {
             accumulatedProviderMetadata = mergeProviderMetadata(accumulatedProviderMetadata, metadata);
-            streamMessages = streamMessages.map((msg) =>
-              msg.id === assistantMessageId
-                ? {
-                  ...msg,
-                  providerMetadata: accumulatedProviderMetadata,
-                }
-                : msg
-            );
-
-            if (activeConversationIdRef.current === conversationId) {
-              setMessages(streamMessages);
-            }
-
-            persistStreamMessages(conversationId, streamMessages);
+            updateStreamingAssistant((message) => ({
+              ...message,
+              providerMetadata: accumulatedProviderMetadata,
+              streamState: 'streaming',
+              streamError: undefined,
+            }));
           },
           onRawEvent: (rawLine) => {
             rawResponseLines.push(rawLine);
           },
           onError: (error) => {
             if (error.name === 'AbortError') {
-              if (activeConversationIdRef.current === conversationId) {
-                setIsLoading(false);
-              }
-              isStreamingRef.current = false;
-              streamingConversationIdRef.current = null;
-              abortControllerRef.current = null;
-              clearPersistTimer();
               return;
             }
 
             console.error('Streaming error:', error);
-            streamMessages = streamMessages.map((msg) =>
-              msg.id === assistantMessageId
-                ? {
-                  ...msg,
-                  content: error.message,
-                  reasoning: accumulatedReasoning,
-                  reasoningDetails: accumulatedReasoningDetails,
-                  providerMetadata: accumulatedProviderMetadata,
-                }
-                : msg
-            );
+            const streamError = streamWasBackgroundedRef.current
+              ? '页面进入后台后，流式连接已中断，已保留已生成内容。'
+              : `网络或流式连接已中断，已保留已生成内容。${error.message ? ` ${error.message}` : ''}`.trim();
 
-            persistStreamMessages(conversationId, streamMessages);
-
-            if (activeConversationIdRef.current === conversationId) {
-              setMessages(streamMessages);
-              setIsLoading(false);
-            }
-
-            isStreamingRef.current = false;
-            streamingConversationIdRef.current = null;
-            clearPersistTimer();
+            void finalizeStream(buildFinalAssistantMessage('error', streamError));
           },
           onComplete: () => {
-            const rawResponse = rawResponseLines.length > 0
-              ? rawResponseLines.join('\n')
-              : undefined;
-            const finalMessages = [
-              ...baseMessages,
-              {
-                ...assistantMessage,
-                content: accumulatedContent,
-                reasoning: accumulatedReasoning || undefined,
-                reasoningDetails: accumulatedReasoningDetails.length > 0
-                  ? accumulatedReasoningDetails
-                  : undefined,
-                rawResponse,
-                usage: latestUsage || undefined,
-                providerMetadata: accumulatedProviderMetadata,
-                ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
-              },
-            ];
-
-            const updatedConversation: Conversation = {
-              ...conversation,
-              messages: finalMessages,
-              title: resolveTitle(baseMessages, titleSeed),
-              updatedAt: Date.now(),
-            };
-
-            const finalize = async () => {
-              if (activeConversationIdRef.current === conversationId) {
-                setMessages(finalMessages);
-                setIsLoading(false);
-              }
-
-              isStreamingRef.current = false;
-              streamingConversationIdRef.current = null;
-              abortControllerRef.current = null;
-              clearPersistTimer();
-
-              const didSaveFinal = await saveConversation(updatedConversation);
-              if (didSaveFinal) {
-                await onConversationUpdate(conversationId);
-              }
-              window.dispatchEvent(new Event('conversationsUpdated'));
-            };
-            void finalize();
+            void finalizeStream(buildFinalAssistantMessage());
           },
         },
         {
@@ -556,13 +596,11 @@ export default function ChatInterface({
       );
     } catch (error) {
       console.error('Error sending message:', error);
-      if (activeConversationIdRef.current === conversationId) {
-        setIsLoading(false);
-      }
-      isStreamingRef.current = false;
-      streamingConversationIdRef.current = null;
-      abortControllerRef.current = null;
-      clearPersistTimer();
+      const normalizedError = error instanceof Error ? error : new Error('Unknown error');
+      const streamError = streamWasBackgroundedRef.current
+        ? '页面进入后台后，流式连接已中断，已保留已生成内容。'
+        : `请求发送失败，已保留已生成内容。${normalizedError.message ? ` ${normalizedError.message}` : ''}`.trim();
+      await finalizeStream(buildFinalAssistantMessage('error', streamError));
     }
   };
 

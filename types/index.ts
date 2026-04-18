@@ -79,6 +79,8 @@ export interface ChatMessage {
   rawResponse?: string;
   usage?: TokenUsage;
   providerMetadata?: ProviderMetadata;
+  streamState?: 'streaming' | 'error' | 'stopped';
+  streamError?: string;
   timestamp: number;
   firstTokenTimestamp?: number;
 }

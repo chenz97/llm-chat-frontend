@@ -1,20 +1,22 @@
 # LLM Chat Assistant
 
-A modern, feature-rich chat interface for interacting with LLM APIs following the OpenAI Chat Completions standard. Built with Next.js, React, and Tailwind CSS.
+A local-first chat interface for OpenAI-compatible chat-completions APIs. The app is built with Next.js, React, TypeScript, and Tailwind CSS, and focuses on practical provider switching, reusable assistant presets, multimodal prompts, and browser-local persistence.
 
 ## Features
 
-- **Multiple API Support**: Configure and manage multiple API endpoints with different base URLs and API keys
-- **Assistant Presets**: Create and save assistant configurations with custom system prompts and model parameters
+- **Multiple API Support**: Configure and manage multiple API endpoints with different base URLs, API keys, and model lists
+- **Assistant Presets**: Save reusable assistant configurations with custom system prompts, model parameters, optional provider binding, and an optional server-proxy toggle
 - **Rich Message Support**:
   - Text messages with streaming responses
+  - Reasoning text, token usage, and raw streamed response inspection when provided by the upstream API
   - Image uploads (base64-encoded following OpenAI's format)
   - Markdown rendering with LaTeX math support
   - Syntax highlighting for code blocks
-- **Conversation Management**: Save and organize multiple conversations with history
-- **Customizable Parameters**: Set model parameters like temperature, max_tokens, top_p, etc. per conversation
-- **Local Storage**: All data is stored locally in your browser using localStorage
-- **Responsive Design**: Modern dark-themed UI that works on desktop and mobile
+- **Conversation Management**: Save, search, restore, edit, regenerate, and delete conversations with history
+- **Customizable Parameters**: Set model parameters like `temperature`, `max_tokens`, `top_p`, and provider-specific fields per preset
+- **Browser-Local Persistence**: IndexedDB is the primary storage layer, with `localStorage` fallback or migration for some settings data
+- **Settings Transfer**: Export and import API configurations and assistant presets as JSON
+- **Responsive Design**: A responsive light-theme interface that works on desktop and mobile
 
 ## Getting Started
 
@@ -37,6 +39,22 @@ npm run dev
 ```
 
 4. Open [http://localhost:3000](http://localhost:3000) in your browser
+
+### Debugging Raw API Responses
+
+To reproduce the frontend chat request outside the browser and inspect the raw HTTP response or network error directly:
+
+1. Create a request JSON file without worrying about `stream`; the script will force `stream: true`.
+2. Run:
+
+```bash
+python3 scripts/debug_chat_completion.py \
+  --base-url https://your-provider.example/v1 \
+  --request-file /path/to/request.json
+```
+
+The script follows the same endpoint resolution as the frontend (`/v1/chat/completions` when needed) and prints the raw status line, response headers, and raw response body. If no HTTP response is received, it prints the underlying Python network exception instead.
+If `--api-key` is omitted, the script reads `API_KEY` from `.env`.
 
 ### Building for Production
 
@@ -98,6 +116,7 @@ When `Send requests via Vercel server proxy` is enabled in a preset, the browser
 Notes:
 - This can help avoid direct browser-to-provider requests in deployed environments like Vercel.
 - In the current implementation, the API key still comes from your saved API configuration in the browser settings.
+- This is a transport convenience feature, not a secret-management boundary: the browser still sends the API key to your deployed app server for forwarding.
 
 ### 3. Start Chatting
 
@@ -118,14 +137,14 @@ To send images with your messages:
 ## Technology Stack
 
 - **Framework**: Next.js 16 with App Router
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **UI Components**: Custom components with Lucide icons
+- **Language**: TypeScript with strict mode
+- **Styling**: Tailwind CSS 4
+- **Runtime UI**: React 19 client components with Lucide icons
 - **Markdown**: react-markdown with:
   - GitHub Flavored Markdown (remark-gfm)
   - LaTeX math (KaTeX)
   - Syntax highlighting (highlight.js)
-- **Storage**: Browser localStorage
+- **Storage**: IndexedDB for primary persistence, with `localStorage` fallback or migration for selected settings data
 
 ## API Compatibility
 
@@ -160,14 +179,16 @@ This application is compatible with any API that follows the OpenAI Chat Complet
 
 ## Data Privacy
 
-All data is stored locally in your browser's localStorage. No data is sent to any server except the API endpoints you configure. Your API keys and conversations remain private and are never shared.
+API configs, presets, and conversations are stored locally in your browser. In the default direct-request mode, chat requests are sent only to the provider endpoint you configure. If you enable the optional Vercel server proxy, requests are sent to your deployed app first and then forwarded upstream, which means your app server also receives the API key and request payload for that chat.
 
 ## Project Structure
 
-```
+```text
 llm-chat-frontend/
 ├── app/                    # Next.js app directory
-│   ├── page.tsx           # Main page component
+│   ├── api/
+│   │   └── chat/completions/route.ts  # Optional server-side proxy for streaming requests
+│   ├── page.tsx           # Main page orchestration and layout state
 │   ├── layout.tsx         # Root layout
 │   └── globals.css        # Global styles
 ├── components/            # React components
@@ -176,13 +197,19 @@ llm-chat-frontend/
 │   ├── ChatInterface.tsx
 │   ├── ConversationConfigSelector.tsx
 │   ├── ConversationSidebar.tsx
+│   ├── ImageLightbox.tsx
 │   ├── MarkdownRenderer.tsx
 │   ├── Message.tsx
-│   └── SettingsModal.tsx
+│   ├── RawResponseModal.tsx
+│   ├── SettingsModal.tsx
+│   └── SettingsTransfer.tsx
 ├── lib/                   # Utility functions
 │   ├── api.ts            # API client for streaming
+│   ├── errorUtils.ts     # Error normalization helpers
 │   ├── imageUtils.ts     # Image handling utilities
-│   └── storage.ts        # localStorage management
+│   └── storage.ts        # IndexedDB and browser storage management
+├── scripts/              # Local debug helpers
+│   └── debug_chat_completion.py
 └── types/                 # TypeScript type definitions
     └── index.ts
 ```
