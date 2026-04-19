@@ -15,6 +15,7 @@ This task hardens the streaming chat experience so partial assistant output is s
 - [x] (2026-04-18) Updated `docs/overview.md`, `docs/architecture.md`, `docs/design.md`, and `docs/planning.md` to describe the new interruption behavior and Android limitation.
 - [x] (2026-04-18) Ran `npm run lint` and recorded the existing repository-wide lint baseline that still fails outside the scope of this change.
 - [x] (2026-04-18) Ran targeted lint on `components/ChatInterface.tsx`, `components/Message.tsx`, and `types/index.ts` with the pre-existing `react-hooks/set-state-in-effect` rule disabled; result was zero errors and one existing `<img>` warning in `components/ChatInterface.tsx`.
+- [x] (2026-04-19) Fixed a follow-up TypeScript build regression where the stop button passed `stopStreaming(reason, streamError)` directly to `onClick`, which expects a mouse event handler.
 
 ## Surprises & Discoveries
 
@@ -120,3 +121,5 @@ At the end of this task:
 Revision note: created this execution document on 2026-04-18 after investigating the current streaming failure behavior so the implementation and documentation work can be tracked together.
 
 Revision note: updated this document on 2026-04-18 after implementation to record the final stream-interruption behavior, the Android backgrounding limitation, and the validation results.
+
+Revision note: updated this document on 2026-04-19 after a follow-up compile fix so the stop button now wraps `stopStreaming()` in an event-safe click handler instead of exposing the business-function signature directly to React.

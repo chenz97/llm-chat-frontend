@@ -850,7 +850,7 @@ export default function ChatInterface({
             {isLoading ? (
               <button
                 type="button"
-                onClick={stopStreaming}
+                onClick={() => stopStreaming()}
                 className="w-11 h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center transition-all duration-200 relative"
                 title="停止生成"
                 aria-label="停止生成"
