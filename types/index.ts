@@ -43,6 +43,7 @@ export interface ResponsesRequest {
   model: string;
   input: ResponsesInputMessage[];
   instructions?: string;
+  previous_response_id?: string;
   stream?: boolean;
   [key: string]: unknown;
 }
@@ -103,6 +104,7 @@ export interface ChatMessage {
   content: string;
   reasoning?: string;
   reasoningDetails?: ReasoningDetail[];
+  responseId?: string;
   imageUrls?: string[]; // For user uploaded images
   imageUrl?: string; // Legacy single-image fallback for older conversations
   rawResponse?: string;

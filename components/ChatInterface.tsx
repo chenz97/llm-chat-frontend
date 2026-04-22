@@ -99,6 +99,28 @@ const normalizeRequestParameters = (
   return responseParameters;
 };
 
+const findLatestAssistantResponseId = (
+  messages: ChatMessage[]
+): { responseId: string; assistantIndex: number } | null => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== 'assistant') {
+      continue;
+    }
+
+    if (typeof message.responseId === 'string' && message.responseId.trim()) {
+      return {
+        responseId: message.responseId,
+        assistantIndex: index,
+      };
+    }
+
+    return null;
+  }
+
+  return null;
+};
+
 const mergeProviderMetadata = (
   current: ProviderMetadata | undefined,
   next: Partial<ProviderMetadata>
@@ -467,6 +489,7 @@ export default function ChatInterface({
     let accumulatedContent = '';
     let accumulatedReasoning = '';
     let latestUsage: TokenUsage | null = null;
+    let responseId: string | undefined;
     const rawResponseLines: string[] = [];
 
     const requestApi = normalizeRequestApi(resolvedPreset?.requestApi);
@@ -478,10 +501,16 @@ export default function ChatInterface({
     let request: ChatCompletionRequest | ResponsesRequest;
 
     if (requestApi === 'responses') {
+      const latestAssistantResponse = findLatestAssistantResponseId(baseMessages);
+      const incrementalMessages = latestAssistantResponse
+        ? baseMessages.slice(latestAssistantResponse.assistantIndex + 1)
+        : baseMessages;
+
       request = {
         model,
-        input: convertToResponsesInput(baseMessages),
+        input: convertToResponsesInput(incrementalMessages),
         ...(resolvedPreset?.systemPrompt ? { instructions: resolvedPreset.systemPrompt } : {}),
+        ...(latestAssistantResponse ? { previous_response_id: latestAssistantResponse.responseId } : {}),
         ...requestParameters,
       };
     } else {
@@ -539,6 +568,7 @@ export default function ChatInterface({
       reasoningDetails: accumulatedReasoningDetails.length > 0
         ? accumulatedReasoningDetails
         : undefined,
+      responseId,
       rawResponse: rawResponse(),
       usage: latestUsage || undefined,
       providerMetadata: accumulatedProviderMetadata,
@@ -586,6 +616,15 @@ export default function ChatInterface({
         resolvedApiConfig.apiKey,
         request,
         {
+          onResponseId: (nextResponseId) => {
+            responseId = nextResponseId;
+            updateStreamingAssistant((message) => ({
+              ...message,
+              responseId: nextResponseId,
+              streamState: 'streaming',
+              streamError: undefined,
+            }));
+          },
           onReasoning: (chunk) => {
             accumulatedReasoning += chunk;
             if (firstTokenTimestamp === null && chunk.length > 0) {

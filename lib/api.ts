@@ -25,6 +25,7 @@ export interface StreamCallbacks {
   onMessage: (chunk: string) => void;
   onReasoning?: (chunk: string) => void;
   onReasoningDetails?: (details: ReasoningDetail[]) => void;
+  onResponseId?: (responseId: string) => void;
   onError: (error: Error) => void;
   onComplete: () => void;
   onUsage?: (usage: TokenUsage) => void;
@@ -355,6 +356,24 @@ function extractResponsesError(data: unknown): Error | null {
   return new Error(message || 'Responses API streaming failed');
 }
 
+function extractResponsesResponseId(data: unknown): string | null {
+  const record = asRecord(data);
+  if (!record) {
+    return null;
+  }
+
+  if (typeof record.response_id === 'string' && record.response_id.trim()) {
+    return record.response_id;
+  }
+
+  const response = asRecord(record.response);
+  if (typeof response?.id === 'string' && response.id.trim()) {
+    return response.id;
+  }
+
+  return null;
+}
+
 export async function streamChatCompletion(
   baseUrl: string,
   apiKey: string,
@@ -442,6 +461,11 @@ export async function streamChatCompletion(
             const data: unknown = JSON.parse(jsonStr);
 
             if (requestApi === 'responses') {
+              const responseId = extractResponsesResponseId(data);
+              if (responseId) {
+                callbacks.onResponseId?.(responseId);
+              }
+
               const streamingError = extractResponsesError(data);
               if (streamingError) {
                 onError(streamingError);

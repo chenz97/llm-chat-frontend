@@ -14,6 +14,9 @@ This task adds OpenAI Responses API support to the existing local-first chat cli
 - [x] (2026-04-22) Added preset UI controls and summary display for selecting `chat_completions` or `responses`.
 - [x] (2026-04-22) Extended request building, streaming parsing, and the optional proxy so the frontend can send either API shape.
 - [x] (2026-04-22) Ran validation and synced stable documentation.
+- [x] (2026-04-22) Persist Responses `response.id` values on assistant messages.
+- [x] (2026-04-22) Use `previous_response_id` plus incremental `input` when a valid Responses chain exists, with automatic fallback to full-history replay when it does not.
+- [x] (2026-04-22) Re-ran validation and synced stable docs for the new conversation-state behavior.
 
 ## Surprises & Discoveries
 
@@ -40,6 +43,10 @@ This task adds OpenAI Responses API support to the existing local-first chat cli
 
 - Decision: keep provider records unchanged and derive the final endpoint from the preset at send time.
   Rationale: one provider base URL may need to support both API surfaces depending on the preset, so moving the switch into `ApiConfig` would be too coarse.
+  Date/Author: 2026-04-22 / Codex
+
+- Decision: implement Responses conversation-state carryover via `previous_response_id` rather than manually replaying reasoning items.
+  Rationale: this is the official low-friction continuation mechanism and avoids persisting or reconstructing hidden reasoning content client-side.
   Date/Author: 2026-04-22 / Codex
 
 ## Context and Orientation
@@ -108,6 +115,7 @@ Revision note: updated this document on 2026-04-22 after implementing the preset
 
 Revision note: updated this document on 2026-04-22 after fixing Responses endpoint resolution to stop forcing `/v1` when the configured provider base URL does not include it.
 Revision note: updated this document on 2026-04-22 after tightening Responses reasoning extraction so only `reasoning` output items populate the reasoning UI.
+Revision note: updated this document on 2026-04-22 after adding persisted Responses `response.id` storage and `previous_response_id` continuation with incremental `input`.
 
 ## Outcomes & Retrospective
 
@@ -118,6 +126,10 @@ The chat send path now builds either a chat-completions payload or a Responses p
 The Responses compatibility layer also remaps legacy top-level `reasoning_effort` preset parameters into `reasoning.effort`, which keeps existing assistant presets usable when switching from chat completions to responses.
 
 It keeps the guaranteed-safe compatibility remaps (`max_tokens` and `reasoning_effort`) but otherwise continues passing preset parameters through to the provider, because third-party OpenAI-compatible Responses implementations may accept fields that are not documented in OpenAI's own Responses reference.
+
+Responses assistant messages now also persist the upstream `response.id`. When the next Responses request is created and the latest assistant message in the request slice has that saved id, the client sends only the incremental messages after that assistant and includes `previous_response_id`. If a conversation was created before this change, mixes APIs, or otherwise lacks a valid saved Responses id at the latest assistant boundary, the client falls back to replaying the full request slice as `input`.
+
+This makes OpenAI-style Responses conversation-state carryover available without persisting hidden chain-of-thought content in browser storage. The continuation state lives in the upstream provider through `previous_response_id`, while the local app keeps only the assistant-visible output plus the upstream response identifier.
 
 The streaming layer now resolves either `/chat/completions` or `/responses` for both direct browser requests and proxy-forwarded requests. Responses streaming support handles text deltas, best-effort reasoning deltas, final usage extraction, and error terminal events while preserving the existing UI update flow.
 
@@ -136,3 +148,7 @@ Validation artifacts:
     npx tsc --noEmit
 
     Result: passes.
+
+    npx eslint components/ChatInterface.tsx lib/api.ts types/index.ts --rule 'react-hooks/set-state-in-effect: off'
+
+    Result: passes with 0 errors and 0 warnings.

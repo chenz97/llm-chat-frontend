@@ -9,7 +9,7 @@ Stable persisted entities:
 - `ApiConfig`: provider definition with `id`, `name`, `baseUrl`, `apiKey`, `models`, and `createdAt`.
 - `AssistantPreset`: reusable assistant definition with optional `apiConfigId`, fixed `modelId`, `systemPrompt`, arbitrary `parameters`, optional `requestApi`, optional `useVercelServerProxy`, and `createdAt`.
 - `Conversation`: a persisted chat thread with `apiConfigId`, optional `assistantPresetId`, optional `modelIdOverride`, message list, and timestamps.
-- `ChatMessage`: individual message record with `role`, `content`, optional `imageUrls`, legacy optional `imageUrl`, optional reasoning fields, optional usage, optional raw response, and timestamps.
+- `ChatMessage`: individual message record with `role`, `content`, optional `imageUrls`, legacy optional `imageUrl`, optional reasoning fields, optional Responses `responseId`, optional usage, optional raw response, and timestamps.
 - `SettingsExport`: portable JSON envelope for settings backup and restore.
 
 The request-side OpenAI compatibility layer is also defined here through `Message`, `MessageContent`, `ChatCompletionRequest`, `ResponsesRequest`, `ReasoningDetail`, `TokenUsage`, and `ProviderMetadata`.
@@ -59,6 +59,7 @@ Request resolution rules:
 - If neither exists, the first model declared by the provider config is used.
 - Chat-completions requests always add or merge `stream_options.include_usage = true` so providers that support it can return token metrics during or after streaming.
 - Responses requests map the preset `systemPrompt` to `instructions`, emit multimodal user turns as `input_text` plus `input_image`, translate preset `max_tokens` to `max_output_tokens` when no explicit Responses-specific value is present, translate legacy top-level `reasoning_effort` into `reasoning.effort`, and otherwise continue passing preset parameters through to the provider except for chat-completions-specific `stream_options`.
+- When the latest assistant message in the current request slice contains a persisted Responses `responseId`, the next Responses request uses that value as `previous_response_id` and only sends the incremental messages that follow that assistant. If no valid `responseId` chain exists, the app falls back to replaying the full request slice as `input`.
 
 User images are represented as OpenAI-style `content` arrays that contain one text item followed by one `image_url` item per attached image. Stored user messages now prefer `imageUrls` for multi-image turns while still reading legacy single-image `imageUrl` values from older conversations.
 
@@ -72,6 +73,7 @@ Extraction behavior:
 - `extractReasoningChunk` and `extractReasoningDetailsChunk` collect provider-specific reasoning fields when present.
 - `extractUsage` normalizes token usage from several likely provider field names.
 - `extractResponseMetadata` captures provider name and usage detail payloads for later display.
+- `extractResponsesResponseId` captures Responses `response.id` or `response_id` values so later turns can use `previous_response_id`.
 
 `ChatInterface` persists streamed content in two stages:
 
