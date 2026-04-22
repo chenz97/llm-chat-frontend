@@ -2,14 +2,14 @@
 
 ## Purpose
 
-`llm-chat-frontend` is a local-first web client for chat-completions APIs that follow the OpenAI-compatible request and streaming response shape. The application gives a single user a browser UI for configuring providers, selecting models, saving reusable assistant presets, running multi-turn conversations, attaching images, and reviewing streamed responses without requiring a dedicated backend for normal use.
+`llm-chat-frontend` is a local-first web client for chat-completions APIs that follow the OpenAI-compatible request and streaming response shape. The application gives a single user a browser UI for configuring providers, selecting models, saving reusable assistant presets, running multi-turn conversations, attaching one or more images to a user turn, and reviewing streamed responses without requiring a dedicated backend for normal use.
 
 The current implementation is centered on practical experimentation with different providers and models. The browser stores API settings, presets, and conversation history locally so the user can reopen the app and continue previous chats on the same device.
 
 ## Core User Jobs
 
 - Configure one or more provider endpoints with base URL, API key, and available model IDs.
-- Start a conversation, pick an assistant preset and model, and send text or image-assisted prompts.
+- Start a conversation, pick an assistant preset and model, and send text prompts or multimodal prompts with one or more uploaded images.
 - Read streamed assistant output with markdown, code highlighting, math rendering, token usage, reasoning text, and optional raw SSE event inspection.
 - Regenerate or edit messages while keeping the conversation history in local browser storage.
 - Export and import API settings and assistant presets as JSON backups.
@@ -23,7 +23,7 @@ The codebase currently implements the following stable product scope:
 - Assistant preset management with system prompts, model parameters, optional provider binding, and an optional server-proxy toggle.
 - Conversation storage, conversation search, current-conversation restoration, and draft conversation creation before first persistence.
 - Streaming chat completions with partial rendering, cancellation, final persistence, and recovery-friendly interruption handling that preserves already received assistant output.
-- User image upload and paste support using base64 `image_url` message content.
+- User image upload and paste support using base64 `image_url` message content, including multiple images in a single user turn.
 - Markdown rendering with GitHub Flavored Markdown, KaTeX math, and syntax highlighting.
 - A server-side forwarding route at `/api/chat/completions` for deployments where browser-to-provider requests are undesirable.
 - JSON import/export for API configurations and assistant presets.

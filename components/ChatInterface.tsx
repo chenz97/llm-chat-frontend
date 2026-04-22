@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import {
   Conversation,
   ChatMessage,
@@ -20,7 +21,7 @@ import {
   getAssistantPreset,
 } from '@/lib/storage';
 import { streamChatCompletion, convertToOpenAIMessages } from '@/lib/api';
-import { convertImageToBase64, validateImageFile } from '@/lib/imageUtils';
+import { convertImagesToBase64, validateImageFile } from '@/lib/imageUtils';
 import Message from './Message';
 import { Send, Image as ImageIcon, Loader2, Square, ArrowDown } from 'lucide-react';
 
@@ -72,7 +73,7 @@ export default function ChatInterface({
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [image, setImage] = useState<string | null>(null);
+  const [draftImages, setDraftImages] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [apiConfig, setApiConfig] = useState<ApiConfig | null>(null);
   const [assistantPreset, setAssistantPreset] = useState<AssistantPreset | null>(null);
@@ -190,6 +191,16 @@ export default function ChatInterface({
     autoScrollEnabledRef.current = true;
     setIsAutoScrollEnabled(true);
     scrollToBottom('auto');
+  };
+
+  const appendDraftImages = async (files: File[]) => {
+    const validFiles = files.filter((file) => validateImageFile(file));
+    if (validFiles.length === 0) {
+      return;
+    }
+
+    const base64Images = await convertImagesToBase64(validFiles);
+    setDraftImages((currentImages) => currentImages.concat(base64Images));
   };
 
   const updateMessageById = (
@@ -605,14 +616,13 @@ export default function ChatInterface({
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!validateImageFile(file)) return;
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) {
+      return;
+    }
 
     try {
-      const base64 = await convertImageToBase64(file);
-      setImage(base64);
+      await appendDraftImages(files);
     } catch (error) {
       console.error('Error uploading image:', error);
       alert('Failed to upload image');
@@ -629,20 +639,20 @@ export default function ChatInterface({
     const items = e.clipboardData?.items;
     if (!items) return;
 
-    let imageFile: File | null = null;
+    const imageFiles: File[] = [];
     for (const item of items) {
       if (item.type.startsWith('image/')) {
-        imageFile = item.getAsFile();
-        break;
+        const imageFile = item.getAsFile();
+        if (imageFile) {
+          imageFiles.push(imageFile);
+        }
       }
     }
 
-    if (!imageFile) return;
-    if (!validateImageFile(imageFile)) return;
+    if (imageFiles.length === 0) return;
 
     try {
-      const base64 = await convertImageToBase64(imageFile);
-      setImage(base64);
+      await appendDraftImages(imageFiles);
     } catch (error) {
       console.error('Error pasting image:', error);
       alert('Failed to paste image');
@@ -668,14 +678,14 @@ export default function ChatInterface({
       id: generateId(),
       role: 'user',
       content: trimmedInput,
-      imageUrl: image || undefined,
+      imageUrls: draftImages.length > 0 ? draftImages : undefined,
       timestamp: Date.now(),
     };
 
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput('');
-    setImage(null);
+    setDraftImages([]);
     await startAssistantResponse(newMessages, trimmedInput);
   };
 
@@ -786,19 +796,38 @@ export default function ChatInterface({
 
       <div className="flex-shrink-0 border-t border-slate-200/70 bg-slate-50/95 backdrop-blur-sm px-3 sm:px-4 py-3 shadow-lg">
         <div className="w-full">
-          {image && (
-            <div className="mb-4 relative inline-block">
-              <img
-                src={image}
-                alt="Upload preview"
-                className="max-w-xs max-h-32 rounded-lg border border-slate-300"
-              />
-              <button
-                onClick={() => setImage(null)}
-                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 shadow-sm transition-colors duration-200 text-sm"
-              >
-                ×
-              </button>
+          {draftImages.length > 0 && (
+            <div className="mb-4">
+              <div className="mb-2 text-xs font-medium text-slate-500">
+                已附加 {draftImages.length} 张图片
+              </div>
+              <div className="grid max-w-2xl grid-cols-2 gap-2 sm:grid-cols-3">
+                {draftImages.map((imageUrl, index) => (
+                  <div
+                    key={`${imageUrl.slice(0, 32)}-${index}`}
+                    className="relative h-28 overflow-hidden rounded-lg border border-slate-300 bg-white"
+                  >
+                    <Image
+                      src={imageUrl}
+                      alt={`Upload preview ${index + 1}`}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDraftImages((currentImages) => (
+                        currentImages.filter((_, currentIndex) => currentIndex !== index)
+                      ))}
+                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-sm text-white shadow-sm transition-colors duration-200 hover:bg-red-600"
+                      title="移除图片"
+                      aria-label={`移除第 ${index + 1} 张图片`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -807,6 +836,7 @@ export default function ChatInterface({
               type="file"
               ref={fileInputRef}
               accept="image/*"
+              multiple
               onChange={handleImageUpload}
               className="hidden"
             />

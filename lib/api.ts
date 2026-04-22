@@ -7,6 +7,7 @@ import {
   ChatMessage,
 } from '@/types';
 import { normalizeError } from '@/lib/errorUtils';
+import { getMessageImageUrls } from '@/lib/imageUtils';
 
 const VERCEL_PROXY_ENDPOINT = '/api/chat/completions';
 
@@ -357,15 +358,17 @@ export function convertToOpenAIMessages(
   messages: ChatMessage[]
 ): Message[] {
   return messages.map(msg => {
-    if (msg.role === 'user' && msg.imageUrl) {
+    const imageUrls = msg.role === 'user' ? getMessageImageUrls(msg) : [];
+
+    if (msg.role === 'user' && imageUrls.length > 0) {
       return {
         role: 'user',
         content: [
           { type: 'text' as const, text: msg.content },
-          {
+          ...imageUrls.map((imageUrl) => ({
             type: 'image_url' as const,
-            image_url: { url: msg.imageUrl }
-          }
+            image_url: { url: imageUrl }
+          }))
         ]
       };
     }

@@ -28,7 +28,7 @@ The page composes four major UI areas:
 
 - `components/ConversationSidebar.tsx`: loads saved conversations, supports keyword search, and handles deletion and selection.
 - `components/ConversationConfigSelector.tsx`: surfaces current API config, preset, and model selection, and refreshes itself when settings change.
-- `components/ChatInterface.tsx`: owns message rendering, composer state, image handling, streaming lifecycle, throttled persistence, interruption finalization, editing, regeneration, and stop-generation behavior.
+- `components/ChatInterface.tsx`: owns message rendering, composer state, multi-image draft handling, streaming lifecycle, throttled persistence, interruption finalization, editing, regeneration, and stop-generation behavior.
 - `components/SettingsModal.tsx`: tab container for settings management.
 
 ## Settings Subsystem
@@ -71,9 +71,9 @@ The end-to-end chat path is split across `components/ChatInterface.tsx`, `lib/ap
 
 Flow for a normal message:
 
-1. `ChatInterface` collects user text and optional image data URL.
+1. `ChatInterface` collects user text and zero or more uploaded image data URLs.
 2. The component persists a pending assistant placeholder message so the conversation exists before streaming completes.
-3. `lib/api.ts` converts stored `ChatMessage` values into OpenAI-compatible `messages`, inserts the preset system prompt when present, and forces `stream_options.include_usage = true`.
+3. `lib/api.ts` converts stored `ChatMessage` values into OpenAI-compatible `messages`, emits one text item plus one `image_url` item per attached user image, inserts the preset system prompt when present, and forces `stream_options.include_usage = true`.
 4. The client sends the request either directly to the provider endpoint or to `/api/chat/completions`, depending on the preset toggle.
 5. `lib/api.ts` parses SSE `data:` lines, extracts assistant content, reasoning text, reasoning details, token usage, and provider metadata, then feeds incremental callbacks back into `ChatInterface`.
 6. `ChatInterface` updates in-memory messages, throttles partial conversation persistence, flushes pending persistence when the page is backgrounded, and performs a final full save when streaming completes, is stopped, or fails mid-stream.
@@ -84,7 +84,7 @@ Flow for a normal message:
 
 Assistant messages are rendered through:
 
-- `components/Message.tsx`: message shell, copy/edit/regenerate controls, usage display, raw-response access, and image preview handling.
+- `components/Message.tsx`: message shell, copy/edit/regenerate controls, usage display, raw-response access, and single or multi-image preview handling.
 - `components/MarkdownRenderer.tsx`: markdown, math, syntax highlighting, and custom link/code rendering.
 - `components/RawResponseModal.tsx`: modal for inspecting captured raw SSE lines.
 - `components/ImageLightbox.tsx`: zoom and rotate controls for uploaded images.

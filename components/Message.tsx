@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChatMessage } from '@/types';
+import { getMessageImageUrls } from '@/lib/imageUtils';
 import MarkdownRenderer from './MarkdownRenderer';
 import ImageLightbox from './ImageLightbox';
 import { User, Bot, Copy, Check, Pencil, X, Save, RotateCw, Maximize2, FileText } from 'lucide-react';
@@ -19,7 +20,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [copied, setCopied] = useState(false);
-  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [lightboxImageSrc, setLightboxImageSrc] = useState<string | null>(null);
   const [isRawOpen, setIsRawOpen] = useState(false);
   const reasoningContainerRef = useRef<HTMLDivElement>(null);
   const shouldStickReasoningScrollRef = useRef(true);
@@ -40,6 +41,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
     ? (message.firstTokenTimestamp - message.timestamp) / 1000
     : undefined;
   const canShowRawResponse = !isUser && !isSystem && !!message.rawResponse;
+  const messageImageUrls = getMessageImageUrls(message);
   const streamNotice = !isUser && !isSystem
     ? (
       message.streamState === 'error'
@@ -226,32 +228,41 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
           </div>
 
           <div className="space-y-2">
-            {message.imageUrl && (
-              <div
-                className="relative w-64 h-64 rounded-lg overflow-hidden border border-slate-300 cursor-pointer group"
-                onClick={() => setIsLightboxOpen(true)}
-              >
-                <Image
-                  src={message.imageUrl}
-                  alt="Uploaded image"
-                  fill
-                  className="object-contain transition-transform duration-200 group-hover:scale-105"
-                  unoptimized
-                />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-full p-2">
-                    <Maximize2 className="w-5 h-5 text-white" />
+            {messageImageUrls.length > 0 && (
+              <div className={`grid gap-2 ${
+                messageImageUrls.length === 1 ? 'max-w-xs grid-cols-1' : 'max-w-xl grid-cols-2'
+              }`}>
+                {messageImageUrls.map((imageUrl, index) => (
+                  <div
+                    key={`${imageUrl.slice(0, 32)}-${index}`}
+                    className={`relative overflow-hidden rounded-lg border border-slate-300 cursor-pointer group ${
+                      messageImageUrls.length === 1 ? 'w-64 h-64' : 'aspect-square w-full'
+                    }`}
+                    onClick={() => setLightboxImageSrc(imageUrl)}
+                  >
+                    <Image
+                      src={imageUrl}
+                      alt={`Uploaded image ${index + 1}`}
+                      fill
+                      className="object-contain transition-transform duration-200 group-hover:scale-105"
+                      unoptimized
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-full p-2">
+                        <Maximize2 className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
             )}
 
-            {message.imageUrl && (
+            {lightboxImageSrc && (
               <ImageLightbox
-                src={message.imageUrl}
+                src={lightboxImageSrc}
                 alt="Uploaded image"
-                isOpen={isLightboxOpen}
-                onClose={() => setIsLightboxOpen(false)}
+                isOpen={lightboxImageSrc !== null}
+                onClose={() => setLightboxImageSrc(null)}
               />
             )}
 

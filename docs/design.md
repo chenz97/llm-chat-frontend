@@ -9,7 +9,7 @@ Stable persisted entities:
 - `ApiConfig`: provider definition with `id`, `name`, `baseUrl`, `apiKey`, `models`, and `createdAt`.
 - `AssistantPreset`: reusable assistant definition with optional `apiConfigId`, fixed `modelId`, `systemPrompt`, arbitrary `parameters`, optional `useVercelServerProxy`, and `createdAt`.
 - `Conversation`: a persisted chat thread with `apiConfigId`, optional `assistantPresetId`, optional `modelIdOverride`, message list, and timestamps.
-- `ChatMessage`: individual message record with `role`, `content`, optional `imageUrl`, optional reasoning fields, optional usage, optional raw response, and timestamps.
+- `ChatMessage`: individual message record with `role`, `content`, optional `imageUrls`, legacy optional `imageUrl`, optional reasoning fields, optional usage, optional raw response, and timestamps.
 - `SettingsExport`: portable JSON envelope for settings backup and restore.
 
 The request-side OpenAI compatibility layer is also defined here through `Message`, `MessageContent`, `ChatCompletionRequest`, `ReasoningDetail`, `TokenUsage`, and `ProviderMetadata`.
@@ -58,7 +58,7 @@ Request resolution rules:
 - If neither exists, the first model declared by the provider config is used.
 - `stream_options.include_usage` is always added or merged into the outgoing request so providers that support it can return token metrics during or after streaming.
 
-User images are represented as OpenAI-style `content` arrays that contain both a text item and an `image_url` item.
+User images are represented as OpenAI-style `content` arrays that contain one text item followed by one `image_url` item per attached image. Stored user messages now prefer `imageUrls` for multi-image turns while still reading legacy single-image `imageUrl` values from older conversations.
 
 ## Streaming And Persistence Design
 

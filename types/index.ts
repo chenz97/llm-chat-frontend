@@ -75,7 +75,8 @@ export interface ChatMessage {
   content: string;
   reasoning?: string;
   reasoningDetails?: ReasoningDetail[];
-  imageUrl?: string; // For user uploaded images
+  imageUrls?: string[]; // For user uploaded images
+  imageUrl?: string; // Legacy single-image fallback for older conversations
   rawResponse?: string;
   usage?: TokenUsage;
   providerMetadata?: ProviderMetadata;

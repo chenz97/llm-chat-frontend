@@ -12,7 +12,7 @@ The repository is currently in a local-first MVP hardening phase. The primary en
 - Conversation persistence, restoration, search, deletion, and draft creation.
 - Streaming response parsing with reasoning text, usage extraction, and raw-response capture.
 - Stream interruption hardening so network failures and mobile backgrounding preserve partial assistant output instead of replacing it.
-- Image upload and paste support for multimodal prompts.
+- Multi-image upload and paste support for multimodal prompts, with legacy single-image conversation compatibility.
 - Settings import/export and a raw request debugging script.
 - Baseline project documentation under `docs/`.
 - README alignment with the current IndexedDB-first storage model, proxy behavior, and repository structure.

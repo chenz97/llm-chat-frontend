@@ -1,3 +1,5 @@
+import { ChatMessage } from '@/types';
+
 export async function convertImageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -33,4 +35,26 @@ export function validateImageFile(file: File): boolean {
   }
 
   return true;
+}
+
+export async function convertImagesToBase64(files: File[]): Promise<string[]> {
+  return Promise.all(files.map((file) => convertImageToBase64(file)));
+}
+
+export function getMessageImageUrls(
+  message: Pick<ChatMessage, 'imageUrl' | 'imageUrls'>
+): string[] {
+  const imageUrls = Array.isArray(message.imageUrls)
+    ? message.imageUrls.filter((url) => typeof url === 'string' && url.trim().length > 0)
+    : [];
+
+  if (imageUrls.length > 0) {
+    return imageUrls;
+  }
+
+  if (typeof message.imageUrl === 'string' && message.imageUrl.trim().length > 0) {
+    return [message.imageUrl];
+  }
+
+  return [];
 }
