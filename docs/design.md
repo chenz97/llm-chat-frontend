@@ -58,7 +58,7 @@ Request resolution rules:
 - If no override exists, the preset model ID is used.
 - If neither exists, the first model declared by the provider config is used.
 - Chat-completions requests always add or merge `stream_options.include_usage = true` so providers that support it can return token metrics during or after streaming.
-- Responses requests map the preset `systemPrompt` to `instructions`, emit multimodal user turns as `input_text` plus `input_image`, and translate preset `max_tokens` to `max_output_tokens` when no explicit Responses-specific value is present.
+- Responses requests map the preset `systemPrompt` to `instructions`, emit multimodal user turns as `input_text` plus `input_image`, translate preset `max_tokens` to `max_output_tokens` when no explicit Responses-specific value is present, translate legacy top-level `reasoning_effort` into `reasoning.effort`, and otherwise continue passing preset parameters through to the provider except for chat-completions-specific `stream_options`.
 
 User images are represented as OpenAI-style `content` arrays that contain one text item followed by one `image_url` item per attached image. Stored user messages now prefer `imageUrls` for multi-image turns while still reading legacy single-image `imageUrl` values from older conversations.
 

@@ -74,7 +74,26 @@ const normalizeRequestParameters = (
   ) {
     responseParameters.max_output_tokens = responseParameters.max_tokens;
   }
+
+  const reasoningEffort = responseParameters.reasoning_effort;
+  const reasoningConfig = (
+    typeof responseParameters.reasoning === 'object'
+    && responseParameters.reasoning !== null
+    && !Array.isArray(responseParameters.reasoning)
+  )
+    ? { ...(responseParameters.reasoning as Record<string, unknown>) }
+    : {};
+
+  if (reasoningConfig.effort === undefined && reasoningEffort !== undefined) {
+    reasoningConfig.effort = reasoningEffort;
+  }
+
+  if (Object.keys(reasoningConfig).length > 0) {
+    responseParameters.reasoning = reasoningConfig;
+  }
+
   delete responseParameters.max_tokens;
+  delete responseParameters.reasoning_effort;
   delete responseParameters.stream_options;
 
   return responseParameters;

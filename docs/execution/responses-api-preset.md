@@ -26,6 +26,9 @@ This task adds OpenAI Responses API support to the existing local-first chat cli
 - Observation: not every OpenAI-compatible provider that supports chat completions at `/v1/chat/completions` also exposes Responses API at `/v1/responses`.
   Evidence: the user reported a provider where the configured `baseUrl` omits `/v1`, chat completions still work through the app's existing `/v1/chat/completions` resolution, but Responses only works at `/responses`.
 
+- Observation: some preset parameters that work as top-level chat-completions fields are nested differently in Responses API.
+  Evidence: the user provider returned `unsupported parameter reasoning_effort`, which indicates the preset's top-level `reasoning_effort` needed Responses-specific remapping.
+
 ## Decision Log
 
 - Decision: add a preset-level `requestApi` field with `chat_completions` as the default and legacy fallback.
@@ -107,6 +110,10 @@ Revision note: updated this document on 2026-04-22 after fixing Responses endpoi
 Assistant presets can now persist a `requestApi` mode. Existing presets and imported backups default to `chat_completions`, while new or edited presets can opt into `responses` without changing provider records.
 
 The chat send path now builds either a chat-completions payload or a Responses payload from the same stored conversation state. For Responses requests, preset `systemPrompt` is mapped to `instructions`, user images are emitted as `input_image` content items, and legacy preset `max_tokens` values are translated to `max_output_tokens` when a dedicated Responses value was not already provided.
+
+The Responses compatibility layer also remaps legacy top-level `reasoning_effort` preset parameters into `reasoning.effort`, which keeps existing assistant presets usable when switching from chat completions to responses.
+
+It keeps the guaranteed-safe compatibility remaps (`max_tokens` and `reasoning_effort`) but otherwise continues passing preset parameters through to the provider, because third-party OpenAI-compatible Responses implementations may accept fields that are not documented in OpenAI's own Responses reference.
 
 The streaming layer now resolves either `/chat/completions` or `/responses` for both direct browser requests and proxy-forwarded requests. Responses streaming support handles text deltas, best-effort reasoning deltas, final usage extraction, and error terminal events while preserving the existing UI update flow.
 
