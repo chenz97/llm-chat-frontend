@@ -279,6 +279,11 @@ function extractResponsesReasoningTextFromValue(value: unknown): string {
   return extractTextValue(record.text ?? record.content);
 }
 
+function isResponsesReasoningItem(value: unknown): value is Record<string, unknown> {
+  const record = asRecord(value);
+  return record?.type === 'reasoning';
+}
+
 function extractResponsesReasoningChunk(data: unknown): string {
   const record = asRecord(data);
   if (!record) {
@@ -289,7 +294,7 @@ function extractResponsesReasoningChunk(data: unknown): string {
     return extractTextValue(record.delta);
   }
 
-  if (record.type === 'response.output_item.done') {
+  if (record.type === 'response.output_item.done' && isResponsesReasoningItem(record.item)) {
     return extractResponsesReasoningTextFromValue(record.item);
   }
 
@@ -328,7 +333,7 @@ function extractResponsesReasoningDetailsChunk(data: unknown): ReasoningDetail[]
     return [];
   }
 
-  if (record.type === 'response.output_item.done') {
+  if (record.type === 'response.output_item.done' && isResponsesReasoningItem(record.item)) {
     return collectResponsesReasoningDetails(record.item);
   }
 

@@ -29,6 +29,9 @@ This task adds OpenAI Responses API support to the existing local-first chat cli
 - Observation: some preset parameters that work as top-level chat-completions fields are nested differently in Responses API.
   Evidence: the user provider returned `unsupported parameter reasoning_effort`, which indicates the preset's top-level `reasoning_effort` needed Responses-specific remapping.
 
+- Observation: provider-specific Responses streams may emit `response.output_item.done` for both reasoning items and ordinary assistant message items.
+  Evidence: the user observed the final assistant answer being duplicated into the UI reasoning panel, which matched the parser treating every `response.output_item.done` as reasoning text.
+
 ## Decision Log
 
 - Decision: add a preset-level `requestApi` field with `chat_completions` as the default and legacy fallback.
@@ -104,6 +107,7 @@ Revision note: created this execution document on 2026-04-22 after investigating
 Revision note: updated this document on 2026-04-22 after implementing the preset toggle, request branching, and validation.
 
 Revision note: updated this document on 2026-04-22 after fixing Responses endpoint resolution to stop forcing `/v1` when the configured provider base URL does not include it.
+Revision note: updated this document on 2026-04-22 after tightening Responses reasoning extraction so only `reasoning` output items populate the reasoning UI.
 
 ## Outcomes & Retrospective
 
