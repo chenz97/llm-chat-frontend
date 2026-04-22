@@ -831,7 +831,10 @@ export default function ChatInterface({
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex gap-3 items-center">
+          <form
+            onSubmit={handleSubmit}
+            className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3"
+          >
             <input
               type="file"
               ref={fileInputRef}
@@ -845,13 +848,13 @@ export default function ChatInterface({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading}
-              className="w-11 h-11 flex items-center justify-center bg-white text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              className="flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-all duration-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               title="Upload image"
             >
               <ImageIcon className="w-5 h-5" />
             </button>
 
-            <div className="flex-1 relative">
+            <div className="relative flex min-w-0 items-center self-center">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -865,7 +868,7 @@ export default function ChatInterface({
                 placeholder="Type your message... (Shift+Enter for new line)"
                 disabled={isLoading}
                 rows={1}
-                className="w-full px-4 py-2 bg-white text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 resize-none min-h-[44px] max-h-32 text-base"
+                className="min-h-11 max-h-32 w-full resize-none rounded-lg border border-slate-200 bg-white px-4 py-[10px] text-base text-slate-900 leading-6 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                 style={{
                   height: 'auto',
                   overflowY: input.split('\n').length > 3 ? 'auto' : 'hidden'
@@ -881,7 +884,7 @@ export default function ChatInterface({
               <button
                 type="button"
                 onClick={() => stopStreaming()}
-                className="w-11 h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center transition-all duration-200 relative"
+                className="relative flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-lg bg-blue-600 text-white transition-all duration-200 hover:bg-blue-700"
                 title="停止生成"
                 aria-label="停止生成"
               >
@@ -892,7 +895,7 @@ export default function ChatInterface({
               <button
                 type="submit"
                 disabled={!input.trim()}
-                className="w-11 h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-200"
+                className="flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-lg bg-blue-600 text-white transition-all duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Send className="w-4 h-4" />
               </button>
