@@ -5,14 +5,19 @@ import {
   ReasoningDetail,
   ProviderMetadata,
   ChatMessage,
+  RequestApi,
+  ResponsesInputMessage,
+  ResponsesRequest,
 } from '@/types';
 import { normalizeError } from '@/lib/errorUtils';
 import { getMessageImageUrls } from '@/lib/imageUtils';
 
 const VERCEL_PROXY_ENDPOINT = '/api/chat/completions';
+const DEFAULT_REQUEST_API: RequestApi = 'chat_completions';
 
 export interface StreamOptions {
   signal?: AbortSignal;
+  requestApi?: RequestApi;
   useVercelServerProxy?: boolean;
 }
 
@@ -32,6 +37,10 @@ interface UsageExtraction {
   usageDetails?: Record<string, unknown>;
 }
 
+function normalizeRequestApi(requestApi?: RequestApi): RequestApi {
+  return requestApi === 'responses' ? 'responses' : DEFAULT_REQUEST_API;
+}
+
 function coerceNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
@@ -48,24 +57,29 @@ function extractUsage(data: unknown): UsageExtraction | null {
   const record = asRecord(data);
   if (!record) return null;
 
-  const usage = asRecord(record.usage);
+  const response = asRecord(record.response);
+  const usage = asRecord(record.usage) ?? asRecord(response?.usage);
   if (!usage) return null;
 
-  const promptTokens = coerceNumber(usage.prompt_tokens);
-  const completionTokens = coerceNumber(usage.completion_tokens);
-  const promptTokensDetails = asRecord(usage.prompt_tokens_details);
-  const completionTokensDetails = asRecord(usage.completion_tokens_details);
+  const promptTokens = coerceNumber(usage.prompt_tokens ?? usage.input_tokens);
+  const completionTokens = coerceNumber(usage.completion_tokens ?? usage.output_tokens);
+  const promptTokensDetails = asRecord(usage.prompt_tokens_details ?? usage.input_tokens_details);
+  const completionTokensDetails = asRecord(
+    usage.completion_tokens_details ?? usage.output_tokens_details
+  );
   const reasoningTokens = coerceNumber(
     usage.reasoning_tokens ?? completionTokensDetails?.reasoning_tokens
   );
   const cachedTokens = coerceNumber(
     usage.cached_tokens
     ?? usage.cache_read_input_tokens
+    ?? usage.input_cached_tokens
     ?? promptTokensDetails?.cached_tokens
   );
   const cacheReadInputTokens = coerceNumber(
     usage.cache_read_input_tokens
     ?? usage.cache_read_tokens
+    ?? usage.input_cached_tokens
     ?? promptTokensDetails?.cached_tokens
   );
   const cacheCreationInputTokens = coerceNumber(
@@ -207,7 +221,10 @@ function extractResponseMetadata(data: unknown): Partial<ProviderMetadata> | nul
     return null;
   }
 
-  const provider = typeof record.provider === 'string' ? record.provider : undefined;
+  const response = asRecord(record.response);
+  const provider = typeof record.provider === 'string'
+    ? record.provider
+    : (typeof response?.provider === 'string' ? response.provider : undefined);
   const usageExtraction = extractUsage(data);
 
   if (!provider && !usageExtraction?.usageDetails) {
@@ -220,10 +237,123 @@ function extractResponseMetadata(data: unknown): Partial<ProviderMetadata> | nul
   };
 }
 
+function extractResponsesContentChunk(data: unknown): string {
+  const record = asRecord(data);
+  if (!record) {
+    return '';
+  }
+
+  if (
+    record.type === 'response.output_text.delta'
+    || record.type === 'response.refusal.delta'
+  ) {
+    return extractTextValue(record.delta);
+  }
+
+  return '';
+}
+
+function extractResponsesReasoningTextFromValue(value: unknown): string {
+  const record = asRecord(value);
+  if (!record) {
+    return '';
+  }
+
+  const summary = Array.isArray(record.summary) ? record.summary : [];
+  const summaryText = summary
+    .map((item) => {
+      const summaryItem = asRecord(item);
+      return extractTextValue(
+        summaryItem?.text
+        ?? summaryItem?.summary_text
+        ?? summaryItem?.content
+        ?? item
+      );
+    })
+    .join('');
+
+  if (summaryText) {
+    return summaryText;
+  }
+
+  return extractTextValue(record.text ?? record.content);
+}
+
+function extractResponsesReasoningChunk(data: unknown): string {
+  const record = asRecord(data);
+  if (!record) {
+    return '';
+  }
+
+  if (record.type === 'response.reasoning_summary_text.delta') {
+    return extractTextValue(record.delta);
+  }
+
+  if (record.type === 'response.output_item.done') {
+    return extractResponsesReasoningTextFromValue(record.item);
+  }
+
+  return '';
+}
+
+function collectResponsesReasoningDetails(value: unknown): ReasoningDetail[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectResponsesReasoningDetails(item));
+  }
+
+  const record = asRecord(value);
+  if (!record) {
+    return [];
+  }
+
+  const details: ReasoningDetail[] = [];
+  if (record.type === 'reasoning') {
+    details.push(record);
+  }
+
+  if (Array.isArray(record.output)) {
+    details.push(...collectResponsesReasoningDetails(record.output));
+  }
+
+  if (record.item) {
+    details.push(...collectResponsesReasoningDetails(record.item));
+  }
+
+  return details;
+}
+
+function extractResponsesReasoningDetailsChunk(data: unknown): ReasoningDetail[] {
+  const record = asRecord(data);
+  if (!record) {
+    return [];
+  }
+
+  if (record.type === 'response.output_item.done') {
+    return collectResponsesReasoningDetails(record.item);
+  }
+
+  return [];
+}
+
+function extractResponsesError(data: unknown): Error | null {
+  const record = asRecord(data);
+  if (!record) {
+    return null;
+  }
+
+  if (record.type !== 'error' && record.type !== 'response.failed') {
+    return null;
+  }
+
+  const errorRecord = asRecord(record.error) ?? asRecord(asRecord(record.response)?.error);
+  const message = extractTextValue(errorRecord?.message ?? record.message);
+  return new Error(message || 'Responses API streaming failed');
+}
+
 export async function streamChatCompletion(
   baseUrl: string,
   apiKey: string,
-  request: ChatCompletionRequest,
+  request: ChatCompletionRequest | ResponsesRequest,
   callbacks: StreamCallbacks,
   options?: StreamOptions
 ): Promise<void> {
@@ -231,6 +361,7 @@ export async function streamChatCompletion(
 
   try {
     const shouldUseServerProxy = options?.useVercelServerProxy === true;
+    const requestApi = normalizeRequestApi(options?.requestApi);
 
     const response = shouldUseServerProxy
       ? await fetch(VERCEL_PROXY_ENDPOINT, {
@@ -241,6 +372,7 @@ export async function streamChatCompletion(
         body: JSON.stringify({
           baseUrl,
           apiKey,
+          requestApi,
           request: {
             ...request,
             stream: true,
@@ -248,7 +380,7 @@ export async function streamChatCompletion(
         }),
         signal: options?.signal,
       })
-      : await fetch(resolveChatCompletionsEndpoint(baseUrl), {
+      : await fetch(resolveApiEndpoint(baseUrl, requestApi), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -294,7 +426,8 @@ export async function streamChatCompletion(
 
         if (trimmedLine === 'data: [DONE]') {
           callbacks.onRawEvent?.(trimmedLine);
-          continue;
+          onComplete();
+          return;
         }
 
         if (trimmedLine.startsWith('data: ')) {
@@ -303,29 +436,67 @@ export async function streamChatCompletion(
             const jsonStr = trimmedLine.slice(6);
             const data: unknown = JSON.parse(jsonStr);
 
-            const reasoningDetails = extractReasoningDetailsChunk(data);
-            if (reasoningDetails.length > 0) {
-              callbacks.onReasoningDetails?.(reasoningDetails);
-            }
+            if (requestApi === 'responses') {
+              const streamingError = extractResponsesError(data);
+              if (streamingError) {
+                onError(streamingError);
+                return;
+              }
 
-            const reasoning = extractReasoningChunk(data);
-            if (reasoning) {
-              onReasoning?.(reasoning);
-            }
+              const reasoningDetails = extractResponsesReasoningDetailsChunk(data);
+              if (reasoningDetails.length > 0) {
+                callbacks.onReasoningDetails?.(reasoningDetails);
+              }
 
-            const content = extractContentChunk(data);
-            if (content) {
-              onMessage(content);
-            }
+              const reasoning = extractResponsesReasoningChunk(data);
+              if (reasoning) {
+                onReasoning?.(reasoning);
+              }
 
-            const usageExtraction = extractUsage(data);
-            if (usageExtraction) {
-              callbacks.onUsage?.(usageExtraction.usage);
-            }
+              const content = extractResponsesContentChunk(data);
+              if (content) {
+                onMessage(content);
+              }
 
-            const metadata = extractResponseMetadata(data);
-            if (metadata) {
-              callbacks.onResponseMetadata?.(metadata);
+              const usageExtraction = extractUsage(data);
+              if (usageExtraction) {
+                callbacks.onUsage?.(usageExtraction.usage);
+              }
+
+              const metadata = extractResponseMetadata(data);
+              if (metadata) {
+                callbacks.onResponseMetadata?.(metadata);
+              }
+
+              if (asRecord(data)?.type === 'response.completed') {
+                onComplete();
+                return;
+              }
+            } else {
+              const reasoningDetails = extractReasoningDetailsChunk(data);
+              if (reasoningDetails.length > 0) {
+                callbacks.onReasoningDetails?.(reasoningDetails);
+              }
+
+              const reasoning = extractReasoningChunk(data);
+              if (reasoning) {
+                onReasoning?.(reasoning);
+              }
+
+              const content = extractContentChunk(data);
+              if (content) {
+                onMessage(content);
+              }
+
+              const usageExtraction = extractUsage(data);
+              if (usageExtraction) {
+                callbacks.onUsage?.(usageExtraction.usage);
+              }
+
+              const metadata = extractResponseMetadata(data);
+              if (metadata) {
+                callbacks.onResponseMetadata?.(metadata);
+              }
             }
           } catch (e) {
             console.error('Error parsing SSE data:', e, trimmedLine);
@@ -352,6 +523,23 @@ function resolveChatCompletionsEndpoint(baseUrl: string): string {
     endpoint += '/chat/completions';
   }
   return endpoint;
+}
+
+function resolveResponsesEndpoint(baseUrl: string): string {
+  let endpoint = baseUrl.replace(/\/$/, '');
+  if (!endpoint.endsWith('/responses')) {
+    if (!endpoint.endsWith('/v1')) {
+      endpoint += '/v1';
+    }
+    endpoint += '/responses';
+  }
+  return endpoint;
+}
+
+function resolveApiEndpoint(baseUrl: string, requestApi: RequestApi): string {
+  return requestApi === 'responses'
+    ? resolveResponsesEndpoint(baseUrl)
+    : resolveChatCompletionsEndpoint(baseUrl);
 }
 
 export function convertToOpenAIMessages(
@@ -383,5 +571,31 @@ export function convertToOpenAIMessages(
     }
 
     return message;
+  });
+}
+
+export function convertToResponsesInput(
+  messages: ChatMessage[]
+): ResponsesInputMessage[] {
+  return messages.map((msg) => {
+    const imageUrls = msg.role === 'user' ? getMessageImageUrls(msg) : [];
+
+    if (msg.role === 'user' && imageUrls.length > 0) {
+      return {
+        role: 'user',
+        content: [
+          { type: 'input_text' as const, text: msg.content },
+          ...imageUrls.map((imageUrl) => ({
+            type: 'input_image' as const,
+            image_url: imageUrl,
+          })),
+        ],
+      };
+    }
+
+    return {
+      role: msg.role as 'system' | 'user' | 'assistant',
+      content: msg.content,
+    };
   });
 }

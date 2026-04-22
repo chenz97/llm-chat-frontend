@@ -1,10 +1,11 @@
 import { NextRequest } from 'next/server';
-import { ChatCompletionRequest } from '@/types';
+import { ChatCompletionRequest, RequestApi, ResponsesRequest } from '@/types';
 import { extractErrorMessage } from '@/lib/errorUtils';
 
 interface ProxyRequestBody {
   baseUrl?: unknown;
   apiKey?: unknown;
+  requestApi?: unknown;
   request?: unknown;
 }
 
@@ -19,6 +20,21 @@ function resolveChatCompletionsEndpoint(baseUrl: string): string {
   return endpoint;
 }
 
+function resolveResponsesEndpoint(baseUrl: string): string {
+  let endpoint = baseUrl.replace(/\/$/, '');
+  if (!endpoint.endsWith('/responses')) {
+    if (!endpoint.endsWith('/v1')) {
+      endpoint += '/v1';
+    }
+    endpoint += '/responses';
+  }
+  return endpoint;
+}
+
+function normalizeRequestApi(value: unknown): RequestApi {
+  return value === 'responses' ? 'responses' : 'chat_completions';
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -28,6 +44,7 @@ export async function POST(nextRequest: NextRequest): Promise<Response> {
     const payload = await nextRequest.json() as ProxyRequestBody;
     const baseUrl = typeof payload.baseUrl === 'string' ? payload.baseUrl.trim() : '';
     const apiKey = typeof payload.apiKey === 'string' ? payload.apiKey.trim() : '';
+    const requestApi = normalizeRequestApi(payload.requestApi);
     const chatRequest = payload.request;
 
     if (!baseUrl || !apiKey || !isRecord(chatRequest)) {
@@ -36,18 +53,23 @@ export async function POST(nextRequest: NextRequest): Promise<Response> {
       });
     }
 
-    const upstreamResponse = await fetch(resolveChatCompletionsEndpoint(baseUrl), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        ...(chatRequest as ChatCompletionRequest),
-        stream: true,
-      }),
-      signal: nextRequest.signal,
-    });
+    const upstreamResponse = await fetch(
+      requestApi === 'responses'
+        ? resolveResponsesEndpoint(baseUrl)
+        : resolveChatCompletionsEndpoint(baseUrl),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          ...(chatRequest as ChatCompletionRequest | ResponsesRequest),
+          stream: true,
+        }),
+        signal: nextRequest.signal,
+      }
+    );
 
     if (!upstreamResponse.ok) {
       const errorText = await upstreamResponse.text();

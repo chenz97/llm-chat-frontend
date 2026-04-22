@@ -36,7 +36,7 @@ The page composes four major UI areas:
 `components/SettingsModal.tsx` exposes three settings surfaces:
 
 - `components/ApiConfigManager.tsx`: CRUD UI for provider records.
-- `components/AssistantPresetManager.tsx`: CRUD UI for reusable assistant presets, including default-preset selection and provider-scoped model filtering.
+- `components/AssistantPresetManager.tsx`: CRUD UI for reusable assistant presets, including default-preset selection, provider-scoped model filtering, and per-preset request API selection.
 - `components/SettingsTransfer.tsx`: JSON import/export for API configs, presets, and the default preset pointer.
 
 Settings screens communicate updates to the rest of the app through browser events such as `settingsUpdated` and `assistantPresetsMigrated`.
@@ -73,12 +73,12 @@ Flow for a normal message:
 
 1. `ChatInterface` collects user text and zero or more uploaded image data URLs.
 2. The component persists a pending assistant placeholder message so the conversation exists before streaming completes.
-3. `lib/api.ts` converts stored `ChatMessage` values into OpenAI-compatible `messages`, emits one text item plus one `image_url` item per attached user image, inserts the preset system prompt when present, and forces `stream_options.include_usage = true`.
-4. The client sends the request either directly to the provider endpoint or to `/api/chat/completions`, depending on the preset toggle.
-5. `lib/api.ts` parses SSE `data:` lines, extracts assistant content, reasoning text, reasoning details, token usage, and provider metadata, then feeds incremental callbacks back into `ChatInterface`.
+3. `ChatInterface` resolves the selected preset request API mode. Chat-completions presets build `messages` and prepend the preset system prompt as a system message, while Responses presets build `input` items and map the preset system prompt to `instructions`.
+4. `lib/api.ts` emits one text item plus one image item per attached user image, targets either `/chat/completions` or `/responses`, and preserves the existing proxy-vs-direct transport choice.
+5. `lib/api.ts` parses SSE `data:` lines, extracts assistant content, best-effort reasoning text, reasoning details, token usage, and provider metadata, then feeds incremental callbacks back into `ChatInterface`.
 6. `ChatInterface` updates in-memory messages, throttles partial conversation persistence, flushes pending persistence when the page is backgrounded, and performs a final full save when streaming completes, is stopped, or fails mid-stream.
 
-`app/api/chat/completions/route.ts` is intentionally narrow. It validates `baseUrl`, `apiKey`, and `request`, resolves the final `/chat/completions` endpoint, forwards the request server-side, and streams the upstream body back to the browser.
+`app/api/chat/completions/route.ts` is intentionally narrow. It validates `baseUrl`, `apiKey`, and `request`, reads the preset-selected request API mode, resolves either the upstream `/chat/completions` or `/responses` endpoint, forwards the request server-side, and streams the upstream body back to the browser.
 
 ## Rendering Pipeline
 
@@ -105,4 +105,4 @@ The message renderer distinguishes user, assistant, and system roles and include
 
 ## Developer Utilities
 
-`scripts/debug_chat_completion.py` mirrors the frontend endpoint-resolution logic and forces `stream: true` so a developer can inspect raw upstream responses outside the browser. This is useful when diagnosing provider-specific network failures or malformed streaming payloads.
+`scripts/debug_chat_completion.py` mirrors the frontend chat-completions endpoint-resolution logic and forces `stream: true` so a developer can inspect raw upstream responses outside the browser. This is useful when diagnosing provider-specific network failures or malformed streaming payloads.

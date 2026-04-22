@@ -1,11 +1,11 @@
 # LLM Chat Assistant
 
-A local-first chat interface for OpenAI-compatible chat-completions APIs. The app is built with Next.js, React, TypeScript, and Tailwind CSS, and focuses on practical provider switching, reusable assistant presets, multimodal prompts, and browser-local persistence.
+A local-first chat interface for OpenAI-compatible chat APIs. The app is built with Next.js, React, TypeScript, and Tailwind CSS, and focuses on practical provider switching, reusable assistant presets, multimodal prompts, and browser-local persistence.
 
 ## Features
 
 - **Multiple API Support**: Configure and manage multiple API endpoints with different base URLs, API keys, and model lists
-- **Assistant Presets**: Save reusable assistant configurations with custom system prompts, model parameters, optional provider binding, and an optional server-proxy toggle
+- **Assistant Presets**: Save reusable assistant configurations with custom system prompts, model parameters, optional provider binding, a per-preset Chat Completions vs Responses API selector, and an optional server-proxy toggle
 - **Rich Message Support**:
   - Text messages with streaming responses
   - Reasoning text, token usage, and raw streamed response inspection when provided by the upstream API
@@ -106,12 +106,13 @@ Create reusable assistant configurations:
    - **Name**: Preset name
    - **Model**: Select from your configured models
    - **System Prompt**: Set the assistant's behavior
+   - **Request API**: Choose `Chat Completions API` or `Responses API` for this preset
    - **Send requests via Vercel server proxy**: When enabled, requests are sent to the app's `/api/chat/completions` route first and then forwarded server-side
    - **Parameters**: Add model parameters like temperature, max_tokens, etc.
 
 ### Vercel Server-Side Proxy
 
-When `Send requests via Vercel server proxy` is enabled in a preset, the browser sends chat requests to this app first (`/api/chat/completions`). The Next.js server route then forwards the streaming request to your configured upstream API endpoint.
+When `Send requests via Vercel server proxy` is enabled in a preset, the browser sends chat requests to this app first (`/api/chat/completions`). The Next.js server route then forwards the streaming request to your configured upstream `/chat/completions` or `/responses` endpoint according to the preset's `Request API` setting.
 
 Notes:
 - This can help avoid direct browser-to-provider requests in deployed environments like Vercel.
@@ -148,7 +149,7 @@ To send images with your messages:
 
 ## API Compatibility
 
-This application is compatible with any API that follows the OpenAI Chat Completions format:
+This application is compatible with providers that expose OpenAI-compatible Chat Completions and, when enabled per preset, OpenAI-compatible Responses endpoints:
 
 - OpenAI API
 - Azure OpenAI

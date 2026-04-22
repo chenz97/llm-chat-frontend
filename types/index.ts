@@ -1,4 +1,6 @@
 // OpenAI API Types
+export type RequestApi = 'chat_completions' | 'responses';
+
 export interface Message {
   role: 'system' | 'user' | 'assistant';
   content: string | MessageContent[];
@@ -18,6 +20,31 @@ export interface ChatCompletionRequest {
   messages: Message[];
   stream?: boolean;
   [key: string]: unknown; // For additional model parameters
+}
+
+export interface ResponsesInputTextContent {
+  type: 'input_text';
+  text: string;
+}
+
+export interface ResponsesInputImageContent {
+  type: 'input_image';
+  image_url: string;
+}
+
+export type ResponsesInputContent = ResponsesInputTextContent | ResponsesInputImageContent;
+
+export interface ResponsesInputMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string | ResponsesInputContent[];
+}
+
+export interface ResponsesRequest {
+  model: string;
+  input: ResponsesInputMessage[];
+  instructions?: string;
+  stream?: boolean;
+  [key: string]: unknown;
 }
 
 export interface ReasoningDetail {
@@ -56,6 +83,7 @@ export interface AssistantPreset {
   modelId: string;
   systemPrompt: string;
   parameters: ModelParameters;
+  requestApi?: RequestApi;
   useVercelServerProxy?: boolean;
   createdAt: number;
 }

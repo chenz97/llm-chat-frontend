@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { AssistantPreset, ApiConfig } from '@/types';
+import { AssistantPreset, ApiConfig, RequestApi } from '@/types';
 import {
   getAssistantPresets,
   saveAssistantPreset,
@@ -14,6 +14,20 @@ import {
   clearAssistantPresetsMigrationNotice,
 } from '@/lib/storage';
 import { Plus, Trash2, Edit2, Check, X, Star } from 'lucide-react';
+
+const REQUEST_API_OPTIONS: Array<{ value: RequestApi; label: string }> = [
+  { value: 'chat_completions', label: 'Chat Completions API' },
+  { value: 'responses', label: 'Responses API' },
+];
+
+const normalizeRequestApi = (value?: RequestApi): RequestApi => (
+  value === 'responses' ? 'responses' : 'chat_completions'
+);
+
+const getRequestApiLabel = (value?: RequestApi): string => (
+  REQUEST_API_OPTIONS.find((option) => option.value === normalizeRequestApi(value))?.label
+  || 'Chat Completions API'
+);
 
 export default function AssistantPresetManager() {
   const [presets, setPresets] = useState<AssistantPreset[]>([]);
@@ -138,6 +152,7 @@ export default function AssistantPresetManager() {
       modelId: availableModels[0] || '',
       systemPrompt: '',
       parameters: {},
+      requestApi: 'chat_completions',
       useVercelServerProxy: false,
       createdAt: Date.now(),
     };
@@ -156,6 +171,7 @@ export default function AssistantPresetManager() {
       modelId: formData.modelId || '',
       systemPrompt: formData.systemPrompt || '',
       parameters: formData.parameters || {},
+      requestApi: normalizeRequestApi(formData.requestApi),
       useVercelServerProxy: formData.useVercelServerProxy === true,
       createdAt: formData.createdAt || Date.now(),
     };
@@ -339,6 +355,21 @@ export default function AssistantPresetManager() {
                   className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900 resize-none"
                 />
 
+                <div className="space-y-1">
+                  <label className="block text-sm font-medium text-slate-700">Request API</label>
+                  <select
+                    value={normalizeRequestApi(formData.requestApi)}
+                    onChange={(e) => setFormData({ ...formData, requestApi: e.target.value as RequestApi })}
+                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                  >
+                    {REQUEST_API_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"
@@ -455,6 +486,9 @@ export default function AssistantPresetManager() {
                     <h3 className="font-semibold text-xl text-slate-900">{preset.name}</h3>
                     <p className="text-base text-slate-600 mt-1">Model: {preset.modelId}</p>
                     <p className="text-sm text-slate-500 mt-1">
+                      API: {getRequestApiLabel(preset.requestApi)}
+                    </p>
+                    <p className="text-sm text-slate-500 mt-1">
                       Request mode: {preset.useVercelServerProxy ? 'Vercel proxy' : 'Browser direct'}
                     </p>
                     {preset.apiConfigId && (
@@ -556,6 +590,21 @@ export default function AssistantPresetManager() {
                 rows={4}
                 className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900 resize-none"
               />
+
+              <div className="space-y-1">
+                <label className="block text-sm font-medium text-slate-700">Request API</label>
+                <select
+                  value={normalizeRequestApi(formData.requestApi)}
+                  onChange={(e) => setFormData({ ...formData, requestApi: e.target.value as RequestApi })}
+                  className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                >
+                  {REQUEST_API_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input

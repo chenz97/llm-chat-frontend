@@ -2,9 +2,9 @@
 
 ## Purpose
 
-`llm-chat-frontend` is a local-first web client for chat-completions APIs that follow the OpenAI-compatible request and streaming response shape. The application gives a single user a browser UI for configuring providers, selecting models, saving reusable assistant presets, running multi-turn conversations, attaching one or more images to a user turn, and reviewing streamed responses without requiring a dedicated backend for normal use.
+`llm-chat-frontend` is a local-first web client for OpenAI-compatible chat APIs. The application gives a single user a browser UI for configuring providers, selecting models, saving reusable assistant presets, running multi-turn conversations, attaching one or more images to a user turn, and reviewing streamed responses without requiring a dedicated backend for normal use.
 
-The current implementation is centered on practical experimentation with different providers and models. The browser stores API settings, presets, and conversation history locally so the user can reopen the app and continue previous chats on the same device.
+The current implementation is centered on practical experimentation with different providers and models. The browser stores API settings, presets, and conversation history locally so the user can reopen the app and continue previous chats on the same device. Requests still default to chat completions, but each assistant preset can now opt into the OpenAI Responses API when the target provider supports it.
 
 ## Core User Jobs
 
@@ -20,9 +20,9 @@ The codebase currently implements the following stable product scope:
 
 - A Next.js App Router single-page chat interface with responsive sidebar and settings modal.
 - API configuration management for multiple OpenAI-compatible providers.
-- Assistant preset management with system prompts, model parameters, optional provider binding, and an optional server-proxy toggle.
+- Assistant preset management with system prompts, model parameters, optional provider binding, a preset-level request API selector, and an optional server-proxy toggle.
 - Conversation storage, conversation search, current-conversation restoration, and draft conversation creation before first persistence.
-- Streaming chat completions with partial rendering, cancellation, final persistence, and recovery-friendly interruption handling that preserves already received assistant output.
+- Streaming chat responses with partial rendering, cancellation, final persistence, and recovery-friendly interruption handling that preserves already received assistant output across both chat-completions and responses request modes.
 - User image upload and paste support using base64 `image_url` message content, including multiple images in a single user turn.
 - Markdown rendering with GitHub Flavored Markdown, KaTeX math, and syntax highlighting.
 - A server-side forwarding route at `/api/chat/completions` for deployments where browser-to-provider requests are undesirable.
@@ -34,7 +34,7 @@ The codebase currently implements the following stable product scope:
 - The app is single-user and browser-local. There is no account system, shared workspace, or remote database.
 - IndexedDB is the primary persistence layer. `localStorage` remains as a fallback and migration source for some settings data.
 - Conversations are not persisted when IndexedDB is unavailable.
-- The app expects OpenAI-compatible chat-completions semantics, especially streamed `data:` server-sent events.
+- The app expects OpenAI-compatible streaming semantics, especially streamed `data:` server-sent events for chat-completions and responses endpoints.
 - Provider-specific extensions such as reasoning fields and detailed usage tokens are handled on a best-effort basis rather than through vendor SDKs.
 - Mobile browsers may suspend or terminate in-flight streaming requests when the page enters the background or the device is locked. The app mitigates this by preserving partial output, but it does not guarantee uninterrupted background streaming.
 - API keys are entered in the browser UI and stored locally in the browser. When the optional Vercel proxy path is used, the browser still sends the saved API key to the application server for forwarding.
@@ -47,7 +47,7 @@ The current implementation does not aim to provide:
 - Multi-user collaboration, accounts, or cloud sync.
 - Server-side secret management, key vault integration, or tenant isolation.
 - Retrieval-augmented generation, document indexing, or knowledge-base features.
-- Workflow orchestration, tool calling UI, agent management, or non-chat OpenAI API surfaces.
+- Workflow orchestration, tool calling UI, agent management, or OpenAI API surfaces beyond chat-completions and responses.
 - Provider-specific SDK integrations beyond the common OpenAI-compatible HTTP contract.
 - Formal observability, analytics, or production operations dashboards.
 

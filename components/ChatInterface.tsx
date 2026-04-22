@@ -7,11 +7,13 @@ import {
   ChatMessage,
   ApiConfig,
   AssistantPreset,
-  TokenUsage,
   ChatCompletionRequest,
   ModelParameters,
   ProviderMetadata,
   ReasoningDetail,
+  RequestApi,
+  ResponsesRequest,
+  TokenUsage,
 } from '@/types';
 import {
   saveConversation,
@@ -20,7 +22,7 @@ import {
   getApiConfig,
   getAssistantPreset,
 } from '@/lib/storage';
-import { streamChatCompletion, convertToOpenAIMessages } from '@/lib/api';
+import { streamChatCompletion, convertToOpenAIMessages, convertToResponsesInput } from '@/lib/api';
 import { convertImagesToBase64, validateImageFile } from '@/lib/imageUtils';
 import Message from './Message';
 import { Send, Image as ImageIcon, Loader2, Square, ArrowDown } from 'lucide-react';
@@ -49,6 +51,33 @@ const normalizeModelParameters = (parameters?: ModelParameters): ModelParameters
   return Object.fromEntries(
     Object.entries(parameters).map(([key, value]) => [key, parseParameterValue(value)])
   ) as ModelParameters;
+};
+
+const normalizeRequestApi = (value?: RequestApi): RequestApi => (
+  value === 'responses' ? 'responses' : 'chat_completions'
+);
+
+const normalizeRequestParameters = (
+  requestApi: RequestApi,
+  parameters?: ModelParameters
+): Record<string, unknown> => {
+  const normalized = normalizeModelParameters(parameters);
+
+  if (requestApi !== 'responses') {
+    return normalized;
+  }
+
+  const responseParameters = { ...normalized };
+  if (
+    responseParameters.max_output_tokens === undefined
+    && responseParameters.max_tokens !== undefined
+  ) {
+    responseParameters.max_output_tokens = responseParameters.max_tokens;
+  }
+  delete responseParameters.max_tokens;
+  delete responseParameters.stream_options;
+
+  return responseParameters;
 };
 
 const mergeProviderMetadata = (
@@ -416,34 +445,50 @@ export default function ChatInterface({
       return;
     }
 
-    const apiMessages = convertToOpenAIMessages(baseMessages);
-
-    if (resolvedPreset?.systemPrompt) {
-      apiMessages.unshift({
-        role: 'system',
-        content: resolvedPreset.systemPrompt,
-      });
-    }
-
     let accumulatedContent = '';
     let accumulatedReasoning = '';
     let latestUsage: TokenUsage | null = null;
     const rawResponseLines: string[] = [];
 
-    const request: ChatCompletionRequest = {
-      model: conversation.modelIdOverride
-        || resolvedPreset?.modelId
-        || resolvedApiConfig.models[0]
-        || 'gpt-3.5-turbo',
-      messages: apiMessages,
-      ...normalizeModelParameters(resolvedPreset?.parameters),
-    };
+    const requestApi = normalizeRequestApi(resolvedPreset?.requestApi);
+    const model = conversation.modelIdOverride
+      || resolvedPreset?.modelId
+      || resolvedApiConfig.models[0]
+      || 'gpt-3.5-turbo';
+    const requestParameters = normalizeRequestParameters(requestApi, resolvedPreset?.parameters);
+    let request: ChatCompletionRequest | ResponsesRequest;
 
-    const streamOptions = request.stream_options;
-    request.stream_options = {
-      ...(typeof streamOptions === 'object' && streamOptions !== null ? streamOptions : {}),
-      include_usage: true,
-    };
+    if (requestApi === 'responses') {
+      request = {
+        model,
+        input: convertToResponsesInput(baseMessages),
+        ...(resolvedPreset?.systemPrompt ? { instructions: resolvedPreset.systemPrompt } : {}),
+        ...requestParameters,
+      };
+    } else {
+      const apiMessages = convertToOpenAIMessages(baseMessages);
+
+      if (resolvedPreset?.systemPrompt) {
+        apiMessages.unshift({
+          role: 'system',
+          content: resolvedPreset.systemPrompt,
+        });
+      }
+
+      const chatRequest: ChatCompletionRequest = {
+        model,
+        messages: apiMessages,
+        ...requestParameters,
+      };
+
+      const streamOptions = chatRequest.stream_options;
+      chatRequest.stream_options = {
+        ...(typeof streamOptions === 'object' && streamOptions !== null ? streamOptions : {}),
+        include_usage: true,
+      };
+
+      request = chatRequest;
+    }
 
     let accumulatedReasoningDetails: ReasoningDetail[] = [];
     let accumulatedProviderMetadata: ProviderMetadata | undefined = request.cache_control !== undefined
@@ -602,6 +647,7 @@ export default function ChatInterface({
         },
         {
           signal: abortControllerRef.current?.signal,
+          requestApi,
           useVercelServerProxy: resolvedPreset?.useVercelServerProxy === true,
         }
       );

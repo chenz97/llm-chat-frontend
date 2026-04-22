@@ -7,12 +7,12 @@ The shared application types live in `types/index.ts`.
 Stable persisted entities:
 
 - `ApiConfig`: provider definition with `id`, `name`, `baseUrl`, `apiKey`, `models`, and `createdAt`.
-- `AssistantPreset`: reusable assistant definition with optional `apiConfigId`, fixed `modelId`, `systemPrompt`, arbitrary `parameters`, optional `useVercelServerProxy`, and `createdAt`.
+- `AssistantPreset`: reusable assistant definition with optional `apiConfigId`, fixed `modelId`, `systemPrompt`, arbitrary `parameters`, optional `requestApi`, optional `useVercelServerProxy`, and `createdAt`.
 - `Conversation`: a persisted chat thread with `apiConfigId`, optional `assistantPresetId`, optional `modelIdOverride`, message list, and timestamps.
 - `ChatMessage`: individual message record with `role`, `content`, optional `imageUrls`, legacy optional `imageUrl`, optional reasoning fields, optional usage, optional raw response, and timestamps.
 - `SettingsExport`: portable JSON envelope for settings backup and restore.
 
-The request-side OpenAI compatibility layer is also defined here through `Message`, `MessageContent`, `ChatCompletionRequest`, `ReasoningDetail`, `TokenUsage`, and `ProviderMetadata`.
+The request-side OpenAI compatibility layer is also defined here through `Message`, `MessageContent`, `ChatCompletionRequest`, `ResponsesRequest`, `ReasoningDetail`, `TokenUsage`, and `ProviderMetadata`.
 
 ## Persistence Strategy
 
@@ -53,10 +53,12 @@ Request resolution rules:
 
 - Base provider comes from `conversation.apiConfigId`.
 - System prompt and model parameters come from the selected assistant preset when present.
+- Request API mode comes from the selected assistant preset and defaults to chat completions when unset.
 - `conversation.modelIdOverride` wins over the preset model ID.
 - If no override exists, the preset model ID is used.
 - If neither exists, the first model declared by the provider config is used.
-- `stream_options.include_usage` is always added or merged into the outgoing request so providers that support it can return token metrics during or after streaming.
+- Chat-completions requests always add or merge `stream_options.include_usage = true` so providers that support it can return token metrics during or after streaming.
+- Responses requests map the preset `systemPrompt` to `instructions`, emit multimodal user turns as `input_text` plus `input_image`, and translate preset `max_tokens` to `max_output_tokens` when no explicit Responses-specific value is present.
 
 User images are represented as OpenAI-style `content` arrays that contain one text item followed by one `image_url` item per attached image. Stored user messages now prefer `imageUrls` for multi-image turns while still reading legacy single-image `imageUrl` values from older conversations.
 
@@ -90,9 +92,10 @@ The optional proxy route accepts:
 
 - `baseUrl`
 - `apiKey`
+- `requestApi`
 - `request`
 
-The route validates that the first two values are non-empty strings and that `request` is an object, then forwards the payload to the resolved `/chat/completions` endpoint with `stream: true`.
+The route validates that the first two values are non-empty strings and that `request` is an object, then forwards the payload to the resolved `/chat/completions` or `/responses` endpoint with `stream: true`.
 
 Important design limitation:
 

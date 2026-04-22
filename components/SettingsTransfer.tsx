@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { Download, Upload } from 'lucide-react';
-import { ApiConfig, AssistantPreset, SettingsExport } from '@/types';
+import { ApiConfig, AssistantPreset, RequestApi, SettingsExport } from '@/types';
 import {
   getApiConfigs,
   getAssistantPresets,
@@ -21,6 +21,10 @@ type StatusMessage = {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const normalizeRequestApi = (value: unknown): RequestApi => (
+  value === 'responses' ? 'responses' : 'chat_completions'
 );
 
 const sanitizeApiConfigs = (rawConfigs: unknown): ApiConfig[] => {
@@ -69,6 +73,7 @@ const sanitizeAssistantPresets = (rawPresets: unknown): AssistantPreset[] => {
       modelId: typeof preset.modelId === 'string' ? preset.modelId : '',
       systemPrompt: typeof preset.systemPrompt === 'string' ? preset.systemPrompt : '',
       parameters: parameters as AssistantPreset['parameters'],
+      requestApi: normalizeRequestApi(preset.requestApi),
       useVercelServerProxy: preset.useVercelServerProxy === true,
       createdAt: typeof preset.createdAt === 'number' ? preset.createdAt : Date.now(),
     });
