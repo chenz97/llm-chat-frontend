@@ -23,6 +23,9 @@ This task adds OpenAI Responses API support to the existing local-first chat cli
 - Observation: assistant presets already control transport-level behavior beyond model parameters.
   Evidence: `AssistantPreset` already stores `useVercelServerProxy`, so adding a second preset-level request toggle is consistent with the existing design.
 
+- Observation: not every OpenAI-compatible provider that supports chat completions at `/v1/chat/completions` also exposes Responses API at `/v1/responses`.
+  Evidence: the user reported a provider where the configured `baseUrl` omits `/v1`, chat completions still work through the app's existing `/v1/chat/completions` resolution, but Responses only works at `/responses`.
+
 ## Decision Log
 
 - Decision: add a preset-level `requestApi` field with `chat_completions` as the default and legacy fallback.
@@ -96,6 +99,8 @@ At the end of this task:
 Revision note: created this execution document on 2026-04-22 after investigating the existing preset/request flow and before making structural edits.
 
 Revision note: updated this document on 2026-04-22 after implementing the preset toggle, request branching, and validation.
+
+Revision note: updated this document on 2026-04-22 after fixing Responses endpoint resolution to stop forcing `/v1` when the configured provider base URL does not include it.
 
 ## Outcomes & Retrospective
 

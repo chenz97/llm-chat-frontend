@@ -23,9 +23,6 @@ function resolveChatCompletionsEndpoint(baseUrl: string): string {
 function resolveResponsesEndpoint(baseUrl: string): string {
   let endpoint = baseUrl.replace(/\/$/, '');
   if (!endpoint.endsWith('/responses')) {
-    if (!endpoint.endsWith('/v1')) {
-      endpoint += '/v1';
-    }
     endpoint += '/responses';
   }
   return endpoint;
