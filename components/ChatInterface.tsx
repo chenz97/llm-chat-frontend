@@ -22,7 +22,12 @@ import {
   getApiConfig,
   getAssistantPreset,
 } from '@/lib/storage';
-import { streamChatCompletion, convertToOpenAIMessages, convertToResponsesInput } from '@/lib/api';
+import {
+  streamChatCompletion,
+  convertToOpenAIMessages,
+  convertToResponsesInput,
+  mergeReasoningDetails,
+} from '@/lib/api';
 import { convertImagesToBase64, validateImageFile } from '@/lib/imageUtils';
 import Message from './Message';
 import { Send, Image as ImageIcon, Loader2, Square, ArrowDown } from 'lucide-react';
@@ -639,7 +644,10 @@ export default function ChatInterface({
             }));
           },
           onReasoningDetails: (details) => {
-            accumulatedReasoningDetails = accumulatedReasoningDetails.concat(details);
+            accumulatedReasoningDetails = mergeReasoningDetails(
+              accumulatedReasoningDetails,
+              details
+            );
             updateStreamingAssistant((message) => ({
               ...message,
               reasoningDetails: accumulatedReasoningDetails,

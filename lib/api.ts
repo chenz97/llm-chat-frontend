@@ -374,6 +374,120 @@ function extractResponsesResponseId(data: unknown): string | null {
   return null;
 }
 
+function buildReasoningDetailKey(detail: ReasoningDetail, fallbackIndex: number): string {
+  const id = typeof detail.id === 'string' ? detail.id : '';
+  const index = typeof detail.index === 'number' ? detail.index : fallbackIndex;
+  const type = typeof detail.type === 'string' ? detail.type : 'unknown';
+  const format = typeof detail.format === 'string' ? detail.format : 'unknown';
+
+  return `${id}::${index}::${type}::${format}`;
+}
+
+function mergeReasoningDetailString(
+  currentValue: unknown,
+  incomingValue: unknown
+): unknown {
+  if (typeof incomingValue !== 'string' || incomingValue.length === 0) {
+    return currentValue;
+  }
+
+  if (typeof currentValue !== 'string' || currentValue.length === 0) {
+    return incomingValue;
+  }
+
+  if (incomingValue === currentValue || incomingValue.startsWith(currentValue)) {
+    return incomingValue;
+  }
+
+  if (currentValue.endsWith(incomingValue)) {
+    return currentValue;
+  }
+
+  return `${currentValue}${incomingValue}`;
+}
+
+function mergeReasoningDetail(
+  current: ReasoningDetail,
+  incoming: ReasoningDetail
+): ReasoningDetail {
+  const merged: ReasoningDetail = {
+    ...current,
+    ...incoming,
+  };
+
+  for (const field of ['text', 'summary', 'data']) {
+    merged[field] = mergeReasoningDetailString(current[field], incoming[field]);
+  }
+
+  if (incoming.signature === null && typeof current.signature === 'string') {
+    merged.signature = current.signature;
+  }
+
+  return merged;
+}
+
+export function mergeReasoningDetails(
+  current: ReasoningDetail[],
+  incoming: ReasoningDetail[]
+): ReasoningDetail[] {
+  const merged = [...current];
+  const keyToIndex = new Map<string, number>();
+
+  merged.forEach((detail, index) => {
+    keyToIndex.set(buildReasoningDetailKey(detail, index), index);
+  });
+
+  incoming.forEach((detail, incomingIndex) => {
+    const key = buildReasoningDetailKey(detail, merged.length + incomingIndex);
+    const existingIndex = keyToIndex.get(key);
+
+    if (existingIndex === undefined) {
+      keyToIndex.set(key, merged.length);
+      merged.push(detail);
+      return;
+    }
+
+    merged[existingIndex] = mergeReasoningDetail(merged[existingIndex], detail);
+  });
+
+  return merged;
+}
+
+function normalizeReasoningDetailsForReplay(details: ReasoningDetail[]): ReasoningDetail[] {
+  return mergeReasoningDetails([], details);
+}
+
+function hasRequiredReasoningSignatures(details: ReasoningDetail[]): boolean {
+  return details.every((detail) => {
+    if (detail.type !== 'reasoning.text') {
+      return true;
+    }
+
+    return typeof detail.signature === 'string' && detail.signature.trim().length > 0;
+  });
+}
+
+function getReplayableReasoningDetails(message: ChatMessage): ReasoningDetail[] | null {
+  if (message.role !== 'assistant') {
+    return null;
+  }
+
+  if (!Array.isArray(message.reasoningDetails) || message.reasoningDetails.length === 0) {
+    return null;
+  }
+
+  if (message.streamState === 'error' || message.streamState === 'stopped') {
+    return null;
+  }
+
+  const normalizedDetails = normalizeReasoningDetailsForReplay(message.reasoningDetails);
+  if (!hasRequiredReasoningSignatures(normalizedDetails)) {
+    return null;
+  }
+
+  return normalizedDetails;
+}
+
 export async function streamChatCompletion(
   baseUrl: string,
   apiKey: string,
@@ -592,8 +706,9 @@ export function convertToOpenAIMessages(
       content: msg.content
     };
 
-    if (msg.role === 'assistant' && Array.isArray(msg.reasoningDetails) && msg.reasoningDetails.length > 0) {
-      message.reasoning_details = msg.reasoningDetails;
+    const replayableReasoningDetails = getReplayableReasoningDetails(msg);
+    if (replayableReasoningDetails) {
+      message.reasoning_details = replayableReasoningDetails;
     }
 
     return message;

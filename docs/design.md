@@ -58,6 +58,7 @@ Request resolution rules:
 - If no override exists, the preset model ID is used.
 - If neither exists, the first model declared by the provider config is used.
 - Chat-completions requests always add or merge `stream_options.include_usage = true` so providers that support it can return token metrics during or after streaming.
+- Persisted assistant reasoning metadata is replayed in outbound chat-completions history only when it comes from a normally completed assistant turn and still contains the required replay signatures after normalization. Interrupted or failed turns keep their reasoning metadata for local display/debug use, but that incomplete state is not replayed upstream.
 - Responses requests map the preset `systemPrompt` to `instructions`, emit multimodal user turns as `input_text` plus `input_image`, translate preset `max_tokens` to `max_output_tokens` when no explicit Responses-specific value is present, translate legacy top-level `reasoning_effort` into `reasoning.effort`, and otherwise continue passing preset parameters through to the provider except for chat-completions-specific `stream_options`.
 - When the latest assistant message in the current request slice contains a persisted Responses `responseId`, the next Responses request uses that value as `previous_response_id` and only sends the incremental messages that follow that assistant. If no valid `responseId` chain exists, the app falls back to replaying the full request slice as `input`.
 
@@ -74,6 +75,8 @@ Extraction behavior:
 - `extractUsage` normalizes token usage from several likely provider field names.
 - `extractResponseMetadata` captures provider name and usage detail payloads for later display.
 - `extractResponsesResponseId` captures Responses `response.id` or `response_id` values so later turns can use `previous_response_id`.
+
+Persisted `reasoningDetails` remain useful for UI inspection and later replay, but they are captured from streaming events and therefore must be merged into stable reasoning blocks before persistence. Outbound replay also normalizes previously saved histories and requires signatures on `reasoning.text` blocks before including them in later chat-completions turns. Interrupted or failed turns are not assumed to contain replay-safe reasoning input.
 
 `ChatInterface` persists streamed content in two stages:
 
