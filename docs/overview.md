@@ -20,7 +20,7 @@ The codebase currently implements the following stable product scope:
 
 - A Next.js App Router single-page chat interface with responsive sidebar and settings modal.
 - API configuration management for multiple OpenAI-compatible providers.
-- Assistant preset management with system prompts, model parameters, optional provider binding, a preset-level request API selector, and an optional server-proxy toggle.
+- Assistant preset management with system prompts, model parameters, optional provider binding, a preset-level request API selector, an optional server-proxy toggle, and per-preset main-selector visibility.
 - Conversation storage, conversation search, current-conversation restoration, and draft conversation creation before first persistence.
 - Streaming chat responses with partial rendering, cancellation, final persistence, and recovery-friendly interruption handling that preserves already received assistant output across both chat-completions and responses request modes.
 - User image upload and paste support using base64 `image_url` message content, including multiple images in a single user turn.

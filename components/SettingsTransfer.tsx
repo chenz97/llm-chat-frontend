@@ -75,6 +75,7 @@ const sanitizeAssistantPresets = (rawPresets: unknown): AssistantPreset[] => {
       parameters: parameters as AssistantPreset['parameters'],
       requestApi: normalizeRequestApi(preset.requestApi),
       useVercelServerProxy: preset.useVercelServerProxy === true,
+      isVisible: preset.isVisible !== false,
       createdAt: typeof preset.createdAt === 'number' ? preset.createdAt : Date.now(),
     });
   }

@@ -9,6 +9,7 @@ The repository is currently in a local-first MVP hardening phase. The primary en
 - Core single-page chat experience built on Next.js App Router.
 - API configuration management for OpenAI-compatible providers.
 - Assistant preset management with default preset support, optional server-proxy routing, and a preset-level OpenAI Responses API toggle.
+- Per-assistant-preset visibility control for hiding presets from the main page preset selector.
 - Conversation persistence, restoration, search, deletion, and draft creation.
 - Streaming response parsing with reasoning text, usage extraction, and raw-response capture.
 - Stream interruption hardening so network failures and mobile backgrounding preserve partial assistant output instead of replacing it.

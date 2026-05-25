@@ -27,7 +27,7 @@ Primary top-level directories:
 The page composes four major UI areas:
 
 - `components/ConversationSidebar.tsx`: loads saved conversations, supports keyword search, and handles deletion and selection.
-- `components/ConversationConfigSelector.tsx`: surfaces current API config, preset, and model selection, and refreshes itself when settings change.
+- `components/ConversationConfigSelector.tsx`: surfaces current API config, preset, and model selection, filters the preset selector by preset visibility, and refreshes itself when settings change.
 - `components/ChatInterface.tsx`: owns message rendering, composer state, multi-image draft handling, streaming lifecycle, throttled persistence, interruption finalization, editing, regeneration, and stop-generation behavior.
 - `components/SettingsModal.tsx`: tab container for settings management.
 
@@ -36,7 +36,7 @@ The page composes four major UI areas:
 `components/SettingsModal.tsx` exposes three settings surfaces:
 
 - `components/ApiConfigManager.tsx`: CRUD UI for provider records.
-- `components/AssistantPresetManager.tsx`: CRUD UI for reusable assistant presets, including default-preset selection, provider-scoped model filtering, and per-preset request API selection.
+- `components/AssistantPresetManager.tsx`: CRUD UI for reusable assistant presets, including default-preset selection, provider-scoped model filtering, per-preset request API selection, and per-preset main-selector visibility.
 - `components/SettingsTransfer.tsx`: JSON import/export for API configs, presets, and the default preset pointer.
 
 Settings screens communicate updates to the rest of the app through browser events such as `settingsUpdated` and `assistantPresetsMigrated`.

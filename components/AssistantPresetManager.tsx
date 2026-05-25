@@ -154,6 +154,7 @@ export default function AssistantPresetManager() {
       parameters: {},
       requestApi: 'chat_completions',
       useVercelServerProxy: false,
+      isVisible: true,
       createdAt: Date.now(),
     };
     pendingScrollIdRef.current = newPreset.id;
@@ -173,6 +174,7 @@ export default function AssistantPresetManager() {
       parameters: formData.parameters || {},
       requestApi: normalizeRequestApi(formData.requestApi),
       useVercelServerProxy: formData.useVercelServerProxy === true,
+      isVisible: formData.isVisible !== false,
       createdAt: formData.createdAt || Date.now(),
     };
 
@@ -373,6 +375,16 @@ export default function AssistantPresetManager() {
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"
+                    checked={formData.isVisible !== false}
+                    onChange={(e) => setFormData({ ...formData, isVisible: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Show in main assistant preset selector
+                </label>
+
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
                     checked={formData.useVercelServerProxy === true}
                     onChange={(e) => setFormData({ ...formData, useVercelServerProxy: e.target.checked })}
                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -491,6 +503,9 @@ export default function AssistantPresetManager() {
                     <p className="text-sm text-slate-500 mt-1">
                       Request mode: {preset.useVercelServerProxy ? 'Vercel proxy' : 'Browser direct'}
                     </p>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Main selector: {preset.isVisible === false ? 'Hidden' : 'Visible'}
+                    </p>
                     {preset.apiConfigId && (
                       <p className="text-sm text-slate-500 mt-1">
                         Provider: {apiConfigs.find((config) => config.id === preset.apiConfigId)?.name || 'Unknown provider'}
@@ -605,6 +620,16 @@ export default function AssistantPresetManager() {
                   ))}
                 </select>
               </div>
+
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={formData.isVisible !== false}
+                  onChange={(e) => setFormData({ ...formData, isVisible: e.target.checked })}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                Show in main assistant preset selector
+              </label>
 
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input

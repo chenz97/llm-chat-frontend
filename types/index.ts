@@ -86,6 +86,7 @@ export interface AssistantPreset {
   parameters: ModelParameters;
   requestApi?: RequestApi;
   useVercelServerProxy?: boolean;
+  isVisible?: boolean;
   createdAt: number;
 }
 

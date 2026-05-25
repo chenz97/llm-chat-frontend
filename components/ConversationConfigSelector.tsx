@@ -30,6 +30,10 @@ export default function ConversationConfigSelector({
 
   const selectedApiConfig = apiConfigs.find((config) => config.id === selectedApiConfigId);
   const selectedPreset = presets.find((preset) => preset.id === selectedPresetId);
+  const visiblePresets = presets.filter((preset) => preset.isVisible !== false);
+  const presetOptions = selectedPreset && selectedPreset.isVisible === false
+    ? [selectedPreset, ...visiblePresets.filter((preset) => preset.id !== selectedPreset.id)]
+    : visiblePresets;
   const availableModels = selectedApiConfig?.models || [];
   const fallbackModelId = selectedPreset?.modelId || availableModels[0] || '';
   const effectiveModelId = selectedModelIdOverride || fallbackModelId;
@@ -160,9 +164,10 @@ export default function ConversationConfigSelector({
             className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-slate-300 transition-colors duration-200"
           >
             <option value="">None (Default)</option>
-            {presets.map((preset) => (
+            {presetOptions.map((preset) => (
               <option key={preset.id} value={preset.id}>
                 {preset.name} - {preset.modelId}
+                {preset.isVisible === false ? ' (hidden)' : ''}
               </option>
             ))}
           </select>

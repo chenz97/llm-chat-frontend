@@ -7,7 +7,7 @@ The shared application types live in `types/index.ts`.
 Stable persisted entities:
 
 - `ApiConfig`: provider definition with `id`, `name`, `baseUrl`, `apiKey`, `models`, and `createdAt`.
-- `AssistantPreset`: reusable assistant definition with optional `apiConfigId`, fixed `modelId`, `systemPrompt`, arbitrary `parameters`, optional `requestApi`, optional `useVercelServerProxy`, and `createdAt`.
+- `AssistantPreset`: reusable assistant definition with optional `apiConfigId`, fixed `modelId`, `systemPrompt`, arbitrary `parameters`, optional `requestApi`, optional `useVercelServerProxy`, optional `isVisible`, and `createdAt`.
 - `Conversation`: a persisted chat thread with `apiConfigId`, optional `assistantPresetId`, optional `modelIdOverride`, message list, and timestamps.
 - `ChatMessage`: individual message record with `role`, `content`, optional `imageUrls`, legacy optional `imageUrl`, optional reasoning fields, optional Responses `responseId`, optional usage, optional raw response, and timestamps.
 - `SettingsExport`: portable JSON envelope for settings backup and restore.
@@ -57,6 +57,7 @@ Request resolution rules:
 - `conversation.modelIdOverride` wins over the preset model ID.
 - If no override exists, the preset model ID is used.
 - If neither exists, the first model declared by the provider config is used.
+- Presets with `isVisible === false` are hidden from the main assistant preset selector. Missing `isVisible` is treated as visible for backward compatibility. If an existing conversation already references a hidden preset, the selector keeps that current hidden value visible as a labeled current option so the displayed configuration remains consistent with the conversation.
 - Chat-completions requests always add or merge `stream_options.include_usage = true` so providers that support it can return token metrics during or after streaming.
 - Persisted assistant reasoning metadata is replayed in outbound chat-completions history only when it comes from a normally completed assistant turn and still contains the required replay signatures after normalization. Interrupted or failed turns keep their reasoning metadata for local display/debug use, but that incomplete state is not replayed upstream.
 - Responses requests map the preset `systemPrompt` to `instructions`, emit multimodal user turns as `input_text` plus `input_image`, translate preset `max_tokens` to `max_output_tokens` when no explicit Responses-specific value is present, translate legacy top-level `reasoning_effort` into `reasoning.effort`, and otherwise continue passing preset parameters through to the provider except for chat-completions-specific `stream_options`.
@@ -113,6 +114,7 @@ Important design limitation:
 - exported JSON version is currently `1`,
 - invalid or incomplete config entries are discarded during import sanitization,
 - preset `apiConfigId` references are cleared if the target provider does not exist in the imported config set,
+- preset visibility is preserved through `isVisible`, with missing values defaulting to visible,
 - the imported default preset is kept only if that preset still exists after normalization.
 
 This design favors successful partial recovery over hard failure when an import file contains stale provider references.
