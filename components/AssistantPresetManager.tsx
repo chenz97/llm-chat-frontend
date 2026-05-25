@@ -223,6 +223,25 @@ export default function AssistantPresetManager() {
     void runToggle();
   };
 
+  const toggleVisibility = (preset: AssistantPreset) => {
+    const runToggle = async () => {
+      const didSave = await saveAssistantPreset({
+        ...preset,
+        isVisible: preset.isVisible === false,
+      });
+
+      if (!didSave) {
+        alert('Failed to save assistant preset. Your browser storage may be full.');
+        return;
+      }
+
+      setPresets(await getAssistantPresets());
+      window.dispatchEvent(new Event('settingsUpdated'));
+    };
+
+    void runToggle();
+  };
+
   const handleCancel = () => {
     setEditing(null);
     setFormData({});
@@ -375,16 +394,6 @@ export default function AssistantPresetManager() {
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"
-                    checked={formData.isVisible !== false}
-                    onChange={(e) => setFormData({ ...formData, isVisible: e.target.checked })}
-                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  Show in main assistant preset selector
-                </label>
-
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
                     checked={formData.useVercelServerProxy === true}
                     onChange={(e) => setFormData({ ...formData, useVercelServerProxy: e.target.checked })}
                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -503,9 +512,6 @@ export default function AssistantPresetManager() {
                     <p className="text-sm text-slate-500 mt-1">
                       Request mode: {preset.useVercelServerProxy ? 'Vercel proxy' : 'Browser direct'}
                     </p>
-                    <p className="text-sm text-slate-500 mt-1">
-                      Main selector: {preset.isVisible === false ? 'Hidden' : 'Visible'}
-                    </p>
                     {preset.apiConfigId && (
                       <p className="text-sm text-slate-500 mt-1">
                         Provider: {apiConfigs.find((config) => config.id === preset.apiConfigId)?.name || 'Unknown provider'}
@@ -552,6 +558,23 @@ export default function AssistantPresetManager() {
                       className="p-2.5 text-red-600 hover:bg-red-50 rounded-md"
                     >
                       <Trash2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={preset.isVisible !== false}
+                      aria-label={preset.isVisible === false ? 'Show in main assistant preset selector' : 'Hide from main assistant preset selector'}
+                      title={preset.isVisible === false ? 'Show in main assistant preset selector' : 'Hide from main assistant preset selector'}
+                      onClick={() => toggleVisibility(preset)}
+                      className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors ${
+                        preset.isVisible === false ? 'bg-slate-300' : 'bg-blue-600'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                          preset.isVisible === false ? 'translate-x-0.5' : 'translate-x-5'
+                        }`}
+                      />
                     </button>
                   </div>
                 </div>
@@ -620,16 +643,6 @@ export default function AssistantPresetManager() {
                   ))}
                 </select>
               </div>
-
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={formData.isVisible !== false}
-                  onChange={(e) => setFormData({ ...formData, isVisible: e.target.checked })}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-                Show in main assistant preset selector
-              </label>
 
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input

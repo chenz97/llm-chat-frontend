@@ -56,3 +56,13 @@ Add a per-assistant-preset visibility switch in Settings. Presets should default
 ## Outcome
 
 Assistant presets now carry optional visibility metadata. New and imported presets default to visible unless `isVisible` is explicitly `false`. Settings exposes a per-preset checkbox, export/import preserves the value, and the main selector filters out hidden presets except for a currently selected hidden preset, which remains labeled as hidden so existing conversations do not silently appear to use a different preset.
+
+## Follow-Up UI Adjustment
+
+On 2026-05-25, the visibility control was moved out of the edit form and into each assistant preset card's top-right action row. The control is now an unlabeled switch placed immediately to the right of the delete button. The card body no longer shows a textual visibility status. The switch still updates the same `isVisible` metadata and dispatches `settingsUpdated` so the main selector refreshes immediately.
+
+Additional validation:
+
+- `npm run lint` still fails on the same pre-existing lint errors documented above; the switch adjustment did not add a new lint failure.
+- `npm run build` again failed in the default sandbox because Google Fonts could not be fetched.
+- `npm run build` passed when rerun with network access.
