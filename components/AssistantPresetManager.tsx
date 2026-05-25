@@ -566,13 +566,13 @@ export default function AssistantPresetManager() {
                       aria-label={preset.isVisible === false ? 'Show in main assistant preset selector' : 'Hide from main assistant preset selector'}
                       title={preset.isVisible === false ? 'Show in main assistant preset selector' : 'Hide from main assistant preset selector'}
                       onClick={() => toggleVisibility(preset)}
-                      className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors ${
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 transition-colors ${
                         preset.isVisible === false ? 'bg-slate-300' : 'bg-blue-600'
                       }`}
                     >
                       <span
-                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                          preset.isVisible === false ? 'translate-x-0.5' : 'translate-x-5'
+                        className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                          preset.isVisible === false ? 'translate-x-0' : 'translate-x-5'
                         }`}
                       />
                     </button>

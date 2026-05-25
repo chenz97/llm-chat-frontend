@@ -66,3 +66,13 @@ Additional validation:
 - `npm run lint` still fails on the same pre-existing lint errors documented above; the switch adjustment did not add a new lint failure.
 - `npm run build` again failed in the default sandbox because Google Fonts could not be fetched.
 - `npm run build` passed when rerun with network access.
+
+## Switch Layout Fix
+
+On 2026-05-25, the switch layout was corrected after visual inspection showed the white knob could overflow when enabled and appear in the wrong position when disabled. The root cause was an absolutely positioned 20px knob combined with `translate-x-5` inside a 44px track, which left no safe right-side padding in the enabled state. The control now uses an `inline-flex` 44px by 24px track with 2px padding, a 20px knob, `translate-x-0` when disabled, and `translate-x-5` when enabled.
+
+Validation:
+
+- Playwright real-browser verification passed in Chromium after loading the Settings > Assistant Presets screen with one visible preset and one hidden preset. Measured bounds confirmed the knob stayed inside the track in enabled, disabled, and disabled-to-enabled click states. Screenshot artifact: `/tmp/preset-switch-check.png`.
+- `npm run build` passed with network access. The default sandbox build still fails only because `next/font` cannot fetch Google Fonts.
+- `npm run lint` still fails on the same pre-existing lint errors documented above; the switch layout fix did not add a new lint failure.
