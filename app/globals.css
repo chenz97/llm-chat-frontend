@@ -219,13 +219,14 @@ body {
 }
 
 .markdown-code-block pre {
-  padding-top: 2.75rem;
+  padding-top: 1.35rem;
+  padding-right: 3.25rem;
 }
 
 .markdown-code-copy-button {
   position: absolute;
-  top: 0.625rem;
-  right: 0.625rem;
+  top: 0.5rem;
+  right: 0.5rem;
   z-index: 1;
   display: inline-flex;
   width: 2rem;
