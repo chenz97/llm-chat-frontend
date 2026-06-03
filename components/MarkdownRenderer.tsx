@@ -1,6 +1,8 @@
 'use client';
 
-import type { ComponentPropsWithoutRef } from 'react';
+import { Check, Copy } from 'lucide-react';
+import { isValidElement, useState } from 'react';
+import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -12,6 +14,80 @@ import 'highlight.js/styles/github-dark.css';
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+}
+
+function extractTextFromNode(node: ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') {
+    return String(node);
+  }
+
+  if (Array.isArray(node)) {
+    return node.map(extractTextFromNode).join('');
+  }
+
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return extractTextFromNode(node.props.children);
+  }
+
+  return '';
+}
+
+async function copyTextToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.setAttribute('readonly', '');
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-9999px';
+  textArea.style.top = '0';
+  document.body.appendChild(textArea);
+  textArea.select();
+
+  try {
+    document.execCommand('copy');
+  } finally {
+    document.body.removeChild(textArea);
+  }
+}
+
+function CodeBlock({
+  children,
+  ...props
+}: ComponentPropsWithoutRef<'pre'>) {
+  const [didCopy, setDidCopy] = useState(false);
+  const codeText = extractTextFromNode(children).replace(/\n$/, '');
+
+  const handleCopy = async () => {
+    if (!codeText) {
+      return;
+    }
+
+    await copyTextToClipboard(codeText);
+    setDidCopy(true);
+    window.setTimeout(() => setDidCopy(false), 1600);
+  };
+
+  return (
+    <div className="markdown-code-block group">
+      <button
+        type="button"
+        className="markdown-code-copy-button"
+        onClick={handleCopy}
+        disabled={!codeText}
+        aria-label={didCopy ? 'Code copied' : 'Copy code'}
+        title={didCopy ? 'Copied' : 'Copy code'}
+      >
+        {didCopy ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+      </button>
+      <pre className="bg-slate-900 rounded-lg p-4 overflow-x-auto" {...props}>
+        {children}
+      </pre>
+    </div>
+  );
 }
 
 function isEscaped(text: string, index: number): boolean {
@@ -139,11 +215,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
             );
           },
           pre({ children, ...props }: ComponentPropsWithoutRef<'pre'>) {
-            return (
-              <pre className="bg-slate-900 rounded-lg p-4 overflow-x-auto" {...props}>
-                {children}
-              </pre>
-            );
+            return <CodeBlock {...props}>{children}</CodeBlock>;
           },
           a({ children, href, ...props }: ComponentPropsWithoutRef<'a'>) {
             return (
