@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import { ApiConfig } from '@/types';
 import { showFloatingStatus } from '@/lib/floatingStatus';
 import { getApiConfigs, saveApiConfig, deleteApiConfig, generateId } from '@/lib/storage';
-import { promptSyncSettingsAfterLocalChange } from '@/lib/settingsSyncWorkflow';
 import { Plus, Trash2, Edit2, Check, X } from 'lucide-react';
 
 export default function ApiConfigManager() {
@@ -105,7 +104,6 @@ export default function ApiConfigManager() {
       kind: 'success',
       message: 'API configuration saved locally.',
     });
-    void promptSyncSettingsAfterLocalChange('API configuration');
   };
 
   const handleEdit = (config: ApiConfig) => {
@@ -132,7 +130,6 @@ export default function ApiConfigManager() {
         kind: 'success',
         message: 'API configuration deleted locally.',
       });
-      void promptSyncSettingsAfterLocalChange('API configuration');
     }
   };
 

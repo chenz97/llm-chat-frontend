@@ -129,9 +129,7 @@ GitHub Gist sync behavior:
 - pushing with a configured Gist ID patches that Gist file,
 - pulling reads the configured file, parses JSON, normalizes it through the same import contract, and overwrites local settings after user confirmation,
 - sync configuration is saved separately from settings export data so GitHub tokens are never included in backup JSON,
-- a Gist sync target is considered configured only when both GitHub token and Gist ID are present locally,
-- after successful local provider or assistant preset changes, the app prompts to sync the current settings export to the configured Gist,
-- settings transfer operations emit floating success or error notifications, and provider/preset changes emit local-result notifications before any optional cloud sync prompt.
+- settings transfer operations emit floating success or error notifications, and provider/preset changes emit local-result notifications without prompting for cloud sync.
 
 ## Error Handling
 

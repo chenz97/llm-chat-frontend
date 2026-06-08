@@ -5,7 +5,7 @@ import { CloudDownload, CloudUpload, Download, Save, Upload } from 'lucide-react
 import type { SettingsExport, SettingsSyncConfig } from '@/types';
 import { pullSettingsFromGist, pushSettingsToGist } from '@/lib/githubGistSync';
 import { showFloatingStatus } from '@/lib/floatingStatus';
-import { normalizeSettingsSyncConfig } from '@/lib/settingsSyncWorkflow';
+import { normalizeSettingsSyncConfig } from '@/lib/settingsSyncConfig';
 import {
   getSettingsSyncConfig,
   setSettingsSyncConfig,

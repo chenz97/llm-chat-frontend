@@ -14,7 +14,6 @@ import {
   hasAssistantPresetsMigrationNotice,
   clearAssistantPresetsMigrationNotice,
 } from '@/lib/storage';
-import { promptSyncSettingsAfterLocalChange } from '@/lib/settingsSyncWorkflow';
 import { Plus, Trash2, Edit2, Check, X, Star } from 'lucide-react';
 
 const REQUEST_API_OPTIONS: Array<{ value: RequestApi; label: string }> = [
@@ -203,7 +202,6 @@ export default function AssistantPresetManager() {
       kind: 'success',
       message: 'Assistant preset saved locally.',
     });
-    void promptSyncSettingsAfterLocalChange('Assistant preset');
   };
 
   const handleEdit = (preset: AssistantPreset) => {
@@ -230,7 +228,6 @@ export default function AssistantPresetManager() {
         kind: 'success',
         message: 'Assistant preset deleted locally.',
       });
-      void promptSyncSettingsAfterLocalChange('Assistant preset');
     }
   };
 
@@ -248,7 +245,6 @@ export default function AssistantPresetManager() {
         kind: 'success',
         message: 'Default assistant preset updated locally.',
       });
-      void promptSyncSettingsAfterLocalChange('Default assistant preset');
     };
     void runToggle();
   };
@@ -275,7 +271,6 @@ export default function AssistantPresetManager() {
         kind: 'success',
         message: 'Assistant preset visibility updated locally.',
       });
-      void promptSyncSettingsAfterLocalChange('Assistant preset visibility');
     };
 
     void runToggle();
@@ -541,8 +536,8 @@ export default function AssistantPresetManager() {
               </div>
             ) : (
               <div>
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
                     <h3 className="font-semibold text-xl text-slate-900">{preset.name}</h3>
                     <p className="text-base text-slate-600 mt-1">Model: {preset.modelId}</p>
                     <p className="text-sm text-slate-500 mt-1">
@@ -574,7 +569,7 @@ export default function AssistantPresetManager() {
                       </div>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-shrink-0 items-center gap-2 self-start sm:self-start">
                     <button
                       onClick={() => toggleDefault(preset.id)}
                       className={`p-2.5 rounded-md transition-colors ${
@@ -598,23 +593,25 @@ export default function AssistantPresetManager() {
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={preset.isVisible !== false}
-                      aria-label={preset.isVisible === false ? 'Show in main assistant preset selector' : 'Hide from main assistant preset selector'}
-                      title={preset.isVisible === false ? 'Show in main assistant preset selector' : 'Hide from main assistant preset selector'}
-                      onClick={() => toggleVisibility(preset)}
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 transition-colors ${
-                        preset.isVisible === false ? 'bg-slate-300' : 'bg-blue-600'
-                      }`}
-                    >
-                      <span
-                        className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                          preset.isVisible === false ? 'translate-x-0' : 'translate-x-5'
+                    <div className="flex h-9 items-center">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={preset.isVisible !== false}
+                        aria-label={preset.isVisible === false ? 'Show in main assistant preset selector' : 'Hide from main assistant preset selector'}
+                        title={preset.isVisible === false ? 'Show in main assistant preset selector' : 'Hide from main assistant preset selector'}
+                        onClick={() => toggleVisibility(preset)}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 transition-colors ${
+                          preset.isVisible === false ? 'bg-slate-300' : 'bg-blue-600'
                         }`}
-                      />
-                    </button>
+                      >
+                        <span
+                          className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                            preset.isVisible === false ? 'translate-x-0' : 'translate-x-5'
+                          }`}
+                        />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

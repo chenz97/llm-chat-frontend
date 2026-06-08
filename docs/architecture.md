@@ -46,7 +46,7 @@ Settings transfer logic is split so the UI can share validation and remote-sync 
 - `lib/settingsTransferCore.ts`: versioned settings import normalization and the shared settings transfer constants.
 - `lib/settingsTransfer.ts`: storage-backed settings export construction and normalized import persistence.
 - `lib/githubGistSync.ts`: direct GitHub REST API calls for creating, updating, and reading the configured Gist file.
-- `lib/settingsSyncWorkflow.ts`: shared post-change workflow for detecting configured Gist sync and pushing the current settings export after local provider or preset changes.
+- `lib/settingsSyncConfig.ts`: local sync configuration normalization shared by the Gist sync UI.
 - `lib/floatingStatus.ts` and `components/FloatingStatus.tsx`: browser event and UI surface for floating success or error notifications inside the settings modal.
 
 `components/SettingsModal.tsx` listens for floating status events so nested settings tabs can report operation outcomes without each tab owning its own overlay lifecycle.
