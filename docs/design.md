@@ -11,6 +11,7 @@ Stable persisted entities:
 - `Conversation`: a persisted chat thread with `apiConfigId`, optional `assistantPresetId`, optional `modelIdOverride`, message list, and timestamps.
 - `ChatMessage`: individual message record with `role`, `content`, optional `imageUrls`, legacy optional `imageUrl`, optional reasoning fields, optional Responses `responseId`, optional usage, optional raw response, and timestamps.
 - `SettingsExport`: portable JSON envelope for settings backup and restore.
+- `SettingsSyncConfig`: local-only GitHub Gist sync preference containing the browser-stored token, Gist ID, and target filename.
 
 The request-side OpenAI compatibility layer is also defined here through `Message`, `MessageContent`, `ChatCompletionRequest`, `ResponsesRequest`, `ReasoningDetail`, `TokenUsage`, and `ProviderMetadata`.
 
@@ -109,7 +110,7 @@ Important design limitation:
 
 ## Settings Transfer Contract
 
-`components/SettingsTransfer.tsx` defines a strict but minimal import/export format:
+`lib/settingsTransferCore.ts` defines a strict but minimal import/export format:
 
 - exported JSON version is currently `1`,
 - invalid or incomplete config entries are discarded during import sanitization,
@@ -118,6 +119,16 @@ Important design limitation:
 - the imported default preset is kept only if that preset still exists after normalization.
 
 This design favors successful partial recovery over hard failure when an import file contains stale provider references.
+
+`components/SettingsTransfer.tsx` uses the same contract for local JSON import/export and GitHub Gist sync. `lib/settingsTransfer.ts` builds the storage-backed export payload and persists normalized imports, while `lib/githubGistSync.ts` handles the direct GitHub API integration.
+
+GitHub Gist sync behavior:
+
+- default filename is `llm-chat-settings.json`,
+- pushing with no configured Gist ID creates a private Gist and stores the returned ID locally,
+- pushing with a configured Gist ID patches that Gist file,
+- pulling reads the configured file, parses JSON, normalizes it through the same import contract, and overwrites local settings after user confirmation,
+- sync configuration is saved separately from settings export data so GitHub tokens are never included in backup JSON.
 
 ## Error Handling
 

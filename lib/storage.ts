@@ -1,10 +1,11 @@
-import { ApiConfig, AssistantPreset, Conversation, ChatMessage } from '@/types';
+import type { ApiConfig, AssistantPreset, Conversation, ChatMessage, SettingsSyncConfig } from '@/types';
 
 const STORAGE_KEYS = {
   API_CONFIGS: 'llm_chat_api_configs',
   ASSISTANT_PRESETS: 'llm_chat_assistant_presets',
   ASSISTANT_PRESETS_MIGRATION_NOTICE: 'llm_chat_assistant_presets_migration_notice',
   DEFAULT_PRESET_ID: 'llm_chat_default_preset_id',
+  SETTINGS_SYNC_CONFIG: 'llm_chat_settings_sync_config',
 } as const;
 
 const DB_CONFIG = {
@@ -134,7 +135,7 @@ function openDb(): Promise<IDBDatabase> {
   dbPromise = (async () => {
     try {
       return await openWithVersion(DB_CONFIG.VERSION);
-    } catch (error) {
+    } catch {
       try {
         return await openWithVersion();
       } catch (fallbackError) {
@@ -810,6 +811,26 @@ export async function setCurrentConversationId(id: string | null): Promise<void>
   } catch (error) {
     console.error('Error saving current conversation id to IndexedDB:', error);
   }
+}
+
+export function getSettingsSyncConfig(): SettingsSyncConfig {
+  const stored = getFromStorage<Partial<SettingsSyncConfig>>(STORAGE_KEYS.SETTINGS_SYNC_CONFIG, {});
+
+  return {
+    githubToken: typeof stored.githubToken === 'string' ? stored.githubToken : '',
+    gistId: typeof stored.gistId === 'string' ? stored.gistId : '',
+    filename: typeof stored.filename === 'string' && stored.filename.trim()
+      ? stored.filename
+      : 'llm-chat-settings.json',
+  };
+}
+
+export function setSettingsSyncConfig(config: SettingsSyncConfig): boolean {
+  return saveToStorage(STORAGE_KEYS.SETTINGS_SYNC_CONFIG, {
+    githubToken: config.githubToken,
+    gistId: config.gistId,
+    filename: config.filename.trim() || 'llm-chat-settings.json',
+  });
 }
 
 // Utility function to generate unique IDs

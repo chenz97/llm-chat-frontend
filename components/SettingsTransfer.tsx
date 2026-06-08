@@ -1,141 +1,24 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Download, Upload } from 'lucide-react';
-import { ApiConfig, AssistantPreset, RequestApi, SettingsExport } from '@/types';
+import { useEffect, useRef, useState } from 'react';
+import { CloudDownload, CloudUpload, Download, Save, Upload } from 'lucide-react';
+import type { SettingsExport, SettingsSyncConfig } from '@/types';
+import { pullSettingsFromGist, pushSettingsToGist } from '@/lib/githubGistSync';
 import {
-  getApiConfigs,
-  getAssistantPresets,
-  getDefaultPresetId,
-  setApiConfigs,
-  setAssistantPresets,
-  setDefaultPresetId,
+  getSettingsSyncConfig,
+  setSettingsSyncConfig,
 } from '@/lib/storage';
-
-const SETTINGS_UPDATED_EVENT = 'settingsUpdated';
+import {
+  buildExportData,
+  DEFAULT_SETTINGS_SYNC_FILENAME,
+  normalizeImportData,
+  saveImportedSettings,
+  SETTINGS_UPDATED_EVENT,
+} from '@/lib/settingsTransfer';
 
 type StatusMessage = {
   kind: 'success' | 'error';
   message: string;
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> => (
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-);
-
-const normalizeRequestApi = (value: unknown): RequestApi => (
-  value === 'responses' ? 'responses' : 'chat_completions'
-);
-
-const sanitizeApiConfigs = (rawConfigs: unknown): ApiConfig[] => {
-  if (!Array.isArray(rawConfigs)) return [];
-
-  return rawConfigs
-    .map((config) => {
-      if (!isRecord(config)) return null;
-      const id = typeof config.id === 'string' ? config.id : '';
-      const name = typeof config.name === 'string' ? config.name : '';
-      if (!id || !name) return null;
-
-      const models = Array.isArray(config.models)
-        ? config.models.filter((model): model is string => typeof model === 'string')
-        : [];
-
-      return {
-        id,
-        name,
-        baseUrl: typeof config.baseUrl === 'string' ? config.baseUrl : '',
-        apiKey: typeof config.apiKey === 'string' ? config.apiKey : '',
-        models,
-        createdAt: typeof config.createdAt === 'number' ? config.createdAt : Date.now(),
-      };
-    })
-    .filter((config): config is ApiConfig => Boolean(config));
-};
-
-const sanitizeAssistantPresets = (rawPresets: unknown): AssistantPreset[] => {
-  if (!Array.isArray(rawPresets)) return [];
-
-  const sanitized: AssistantPreset[] = [];
-
-  for (const preset of rawPresets) {
-    if (!isRecord(preset)) continue;
-    const id = typeof preset.id === 'string' ? preset.id : '';
-    const name = typeof preset.name === 'string' ? preset.name : '';
-    if (!id || !name) continue;
-
-    const parameters = isRecord(preset.parameters) ? preset.parameters : {};
-
-    sanitized.push({
-      id,
-      name,
-      apiConfigId: typeof preset.apiConfigId === 'string' ? preset.apiConfigId : undefined,
-      modelId: typeof preset.modelId === 'string' ? preset.modelId : '',
-      systemPrompt: typeof preset.systemPrompt === 'string' ? preset.systemPrompt : '',
-      parameters: parameters as AssistantPreset['parameters'],
-      requestApi: normalizeRequestApi(preset.requestApi),
-      useVercelServerProxy: preset.useVercelServerProxy === true,
-      isVisible: preset.isVisible !== false,
-      createdAt: typeof preset.createdAt === 'number' ? preset.createdAt : Date.now(),
-    });
-  }
-
-  return sanitized;
-};
-
-const buildExportData = async (): Promise<SettingsExport> => ({
-  version: 1,
-  exportedAt: Date.now(),
-  apiConfigs: await getApiConfigs(),
-  assistantPresets: await getAssistantPresets(),
-  defaultPresetId: await getDefaultPresetId(),
-});
-
-const normalizeImportData = (raw: unknown) => {
-  if (!isRecord(raw)) {
-    throw new Error('Invalid settings format.');
-  }
-
-  if (raw.version !== undefined && raw.version !== 1) {
-    throw new Error('Unsupported settings version.');
-  }
-
-  const rawApiConfigs = raw.apiConfigs;
-  const rawAssistantPresets = raw.assistantPresets;
-
-  if (!Array.isArray(rawApiConfigs) || !Array.isArray(rawAssistantPresets)) {
-    throw new Error('Missing settings data.');
-  }
-
-  const apiConfigs = sanitizeApiConfigs(rawApiConfigs);
-  const assistantPresets = sanitizeAssistantPresets(rawAssistantPresets);
-
-  if (rawApiConfigs.length > 0 && apiConfigs.length === 0) {
-    throw new Error('No valid API configurations found.');
-  }
-
-  if (rawAssistantPresets.length > 0 && assistantPresets.length === 0) {
-    throw new Error('No valid assistant presets found.');
-  }
-
-  const apiConfigIds = new Set(apiConfigs.map((config) => config.id));
-  const normalizedPresets = assistantPresets.map((preset) => (
-    preset.apiConfigId && !apiConfigIds.has(preset.apiConfigId)
-      ? { ...preset, apiConfigId: undefined }
-      : preset
-  ));
-
-  const defaultPresetId = typeof raw.defaultPresetId === 'string' ? raw.defaultPresetId : null;
-  const normalizedDefaultPresetId = defaultPresetId
-    && normalizedPresets.some((preset) => preset.id === defaultPresetId)
-    ? defaultPresetId
-    : null;
-
-  return {
-    apiConfigs,
-    assistantPresets: normalizedPresets,
-    defaultPresetId: normalizedDefaultPresetId,
-  };
 };
 
 const downloadSettings = (data: SettingsExport) => {
@@ -155,6 +38,22 @@ const downloadSettings = (data: SettingsExport) => {
 export default function SettingsTransfer() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<StatusMessage | null>(null);
+  const [syncConfig, setSyncConfig] = useState<SettingsSyncConfig>({
+    githubToken: '',
+    gistId: '',
+    filename: DEFAULT_SETTINGS_SYNC_FILENAME,
+  });
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSyncConfig(getSettingsSyncConfig());
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   const handleExport = async () => {
     try {
@@ -192,15 +91,7 @@ export default function SettingsTransfer() {
       const parsed = JSON.parse(text);
       const normalized = normalizeImportData(parsed);
 
-      const didSaveConfigs = await setApiConfigs(normalized.apiConfigs);
-      if (!didSaveConfigs) {
-        throw new Error('Failed to save API configurations.');
-      }
-      const didSavePresets = await setAssistantPresets(normalized.assistantPresets);
-      if (!didSavePresets) {
-        throw new Error('Failed to save assistant presets.');
-      }
-      await setDefaultPresetId(normalized.defaultPresetId);
+      await saveImportedSettings(normalized);
       window.dispatchEvent(new Event(SETTINGS_UPDATED_EVENT));
 
       setStatus({
@@ -215,6 +106,119 @@ export default function SettingsTransfer() {
       });
     } finally {
       event.target.value = '';
+    }
+  };
+
+  const saveSyncConfig = (nextConfig: SettingsSyncConfig): boolean => {
+    const normalized = {
+      ...nextConfig,
+      filename: nextConfig.filename.trim() || DEFAULT_SETTINGS_SYNC_FILENAME,
+    };
+    setSyncConfig(normalized);
+    return setSettingsSyncConfig(normalized);
+  };
+
+  const handleSyncConfigChange = (field: keyof SettingsSyncConfig, value: string) => {
+    setSyncConfig((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const handleSaveSyncConfig = () => {
+    const didSave = saveSyncConfig(syncConfig);
+    setStatus({
+      kind: didSave ? 'success' : 'error',
+      message: didSave
+        ? 'GitHub sync configuration saved.'
+        : 'Failed to save GitHub sync configuration.',
+    });
+  };
+
+  const handleSyncToGitHub = async () => {
+    setIsSyncing(true);
+    setStatus(null);
+
+    try {
+      const savedConfig = {
+        ...syncConfig,
+        filename: syncConfig.filename.trim() || DEFAULT_SETTINGS_SYNC_FILENAME,
+      };
+      const settings = await buildExportData();
+      const result = await pushSettingsToGist({
+        token: savedConfig.githubToken,
+        gistId: savedConfig.gistId,
+        filename: savedConfig.filename,
+        settings,
+      });
+      const nextConfig = {
+        ...savedConfig,
+        gistId: result.gistId,
+      };
+
+      const didSave = saveSyncConfig(nextConfig);
+      if (!didSave) {
+        throw new Error('Settings synced, but the returned Gist ID could not be saved locally.');
+      }
+
+      setStatus({
+        kind: 'success',
+        message: result.didCreate
+          ? `Created private Gist ${result.gistId} and synced settings.`
+          : 'Settings synced to GitHub Gist.',
+      });
+    } catch (error) {
+      console.error('Failed to sync settings to GitHub:', error);
+      setStatus({
+        kind: 'error',
+        message: error instanceof Error
+          ? error.message
+          : 'Failed to sync settings to GitHub.',
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleSyncFromGitHub = async () => {
+    if (!confirm('Syncing from GitHub will overwrite existing API configurations and assistant presets. Continue?')) {
+      return;
+    }
+
+    setIsSyncing(true);
+    setStatus(null);
+
+    try {
+      const savedConfig = {
+        ...syncConfig,
+        filename: syncConfig.filename.trim() || DEFAULT_SETTINGS_SYNC_FILENAME,
+      };
+      saveSyncConfig(savedConfig);
+
+      const parsed = await pullSettingsFromGist({
+        token: savedConfig.githubToken,
+        gistId: savedConfig.gistId,
+        filename: savedConfig.filename,
+      });
+      const normalized = normalizeImportData(parsed);
+
+      await saveImportedSettings(normalized);
+      window.dispatchEvent(new Event(SETTINGS_UPDATED_EVENT));
+
+      setStatus({
+        kind: 'success',
+        message: `Synced ${normalized.apiConfigs.length} API config(s) and ${normalized.assistantPresets.length} preset(s) from GitHub.`,
+      });
+    } catch (error) {
+      console.error('Failed to sync settings from GitHub:', error);
+      setStatus({
+        kind: 'error',
+        message: error instanceof Error
+          ? error.message
+          : 'Failed to sync settings from GitHub.',
+      });
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -255,6 +259,79 @@ export default function SettingsTransfer() {
         />
         <p className="text-xs text-amber-700">
           Importing will overwrite existing settings.
+        </p>
+      </div>
+
+      <div className="app-panel p-4 sm:p-5 space-y-3">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900">GitHub Gist Sync</h3>
+          <p className="text-sm text-slate-600">
+            Store the same settings JSON in a private GitHub Gist and manually sync it back to this browser.
+          </p>
+        </div>
+
+        <div className="grid gap-3">
+          <label className="grid gap-1 text-sm font-medium text-slate-700">
+            GitHub Token
+            <input
+              type="password"
+              value={syncConfig.githubToken}
+              onChange={(event) => handleSyncConfigChange('githubToken', event.target.value)}
+              placeholder="Token with Gist access"
+              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+            />
+          </label>
+          <label className="grid gap-1 text-sm font-medium text-slate-700">
+            Gist ID
+            <input
+              type="text"
+              value={syncConfig.gistId}
+              onChange={(event) => handleSyncConfigChange('gistId', event.target.value)}
+              placeholder="Leave empty to create a private Gist on first sync"
+              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+            />
+          </label>
+          <label className="grid gap-1 text-sm font-medium text-slate-700">
+            Filename
+            <input
+              type="text"
+              value={syncConfig.filename}
+              onChange={(event) => handleSyncConfigChange('filename', event.target.value)}
+              placeholder={DEFAULT_SETTINGS_SYNC_FILENAME}
+              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+            />
+          </label>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleSaveSyncConfig}
+            disabled={isSyncing}
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Save className="w-4 h-4" />
+            Save Sync Config
+          </button>
+          <button
+            onClick={handleSyncToGitHub}
+            disabled={isSyncing}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <CloudUpload className="w-4 h-4" />
+            Sync to GitHub
+          </button>
+          <button
+            onClick={handleSyncFromGitHub}
+            disabled={isSyncing}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <CloudDownload className="w-4 h-4" />
+            Sync from GitHub
+          </button>
+        </div>
+
+        <p className="text-xs text-slate-500">
+          The token is stored only in this browser and is not included in exported settings JSON.
         </p>
       </div>
 

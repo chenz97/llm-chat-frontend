@@ -135,3 +135,15 @@ export interface SettingsExport {
   assistantPresets: AssistantPreset[];
   defaultPresetId: string | null;
 }
+
+export interface SettingsSyncConfig {
+  githubToken: string;
+  gistId: string;
+  filename: string;
+}
+
+export interface NormalizedSettingsImport {
+  apiConfigs: ApiConfig[];
+  assistantPresets: AssistantPreset[];
+  defaultPresetId: string | null;
+}

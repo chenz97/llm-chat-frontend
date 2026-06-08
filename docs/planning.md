@@ -15,6 +15,7 @@ The repository is currently in a local-first MVP hardening phase. The primary en
 - Stream interruption hardening so network failures and mobile backgrounding preserve partial assistant output instead of replacing it.
 - Multi-image upload and paste support for multimodal prompts, with legacy single-image conversation compatibility.
 - Settings import/export and a raw request debugging script.
+- Manual GitHub Gist settings sync from the Import/Export settings page.
 - Baseline project documentation under `docs/`.
 - README alignment with the current IndexedDB-first storage model, proxy behavior, and repository structure.
 
@@ -38,7 +39,7 @@ The following items are reasonable next candidates, but they are not yet committ
 
 ## Risks And Maintenance Watchpoints
 
-- No automated tests means regressions in browser storage and streaming parsing are likely to be discovered manually.
+- Automated tests currently cover only focused settings-transfer logic, so regressions in browser storage, UI flows, and streaming parsing are still likely to be discovered manually.
 - Browser storage limits can prevent saving large histories or many image-heavy conversations.
 - OpenAI-compatible providers do not emit identical SSE payloads, so reasoning and usage extraction may drift by provider.
 - Browser and OS background policies, especially on Android lock screen, can still terminate active streaming requests; the current mitigation preserves partial output but cannot keep the connection alive in every browser.
