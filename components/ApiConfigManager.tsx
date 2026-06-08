@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { ApiConfig } from '@/types';
+import { showFloatingStatus } from '@/lib/floatingStatus';
 import { getApiConfigs, saveApiConfig, deleteApiConfig, generateId } from '@/lib/storage';
+import { promptSyncSettingsAfterLocalChange } from '@/lib/settingsSyncWorkflow';
 import { Plus, Trash2, Edit2, Check, X } from 'lucide-react';
 
 export default function ApiConfigManager() {
@@ -16,7 +18,11 @@ export default function ApiConfigManager() {
 
   useEffect(() => {
     let cancelled = false;
-    setMounted(true);
+    const mountTimer = window.setTimeout(() => {
+      if (!cancelled) {
+        setMounted(true);
+      }
+    }, 0);
 
     const loadConfigs = async () => {
       const loaded = await getApiConfigs();
@@ -29,6 +35,7 @@ export default function ApiConfigManager() {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(mountTimer);
     };
   }, []);
 
@@ -82,6 +89,10 @@ export default function ApiConfigManager() {
 
     const didSave = await saveApiConfig(config);
     if (!didSave) {
+      showFloatingStatus({
+        kind: 'error',
+        message: 'Failed to save API configuration. Your browser storage may be full.',
+      });
       alert('Failed to save API configuration. Your browser storage may be full.');
       return;
     }
@@ -90,6 +101,11 @@ export default function ApiConfigManager() {
     setEditing(null);
     setFormData({});
     window.dispatchEvent(new Event('settingsUpdated'));
+    showFloatingStatus({
+      kind: 'success',
+      message: 'API configuration saved locally.',
+    });
+    void promptSyncSettingsAfterLocalChange('API configuration');
   };
 
   const handleEdit = (config: ApiConfig) => {
@@ -102,12 +118,21 @@ export default function ApiConfigManager() {
     if (confirm('Are you sure you want to delete this API configuration?')) {
       const didDelete = await deleteApiConfig(id);
       if (!didDelete) {
+        showFloatingStatus({
+          kind: 'error',
+          message: 'Failed to delete API configuration. Please try again.',
+        });
         alert('Failed to delete API configuration. Please try again.');
         return;
       }
 
       setConfigs(await getApiConfigs());
       window.dispatchEvent(new Event('settingsUpdated'));
+      showFloatingStatus({
+        kind: 'success',
+        message: 'API configuration deleted locally.',
+      });
+      void promptSyncSettingsAfterLocalChange('API configuration');
     }
   };
 

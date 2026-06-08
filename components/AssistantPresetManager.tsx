@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { AssistantPreset, ApiConfig, RequestApi } from '@/types';
+import { showFloatingStatus } from '@/lib/floatingStatus';
 import {
   getAssistantPresets,
   saveAssistantPreset,
@@ -13,6 +14,7 @@ import {
   hasAssistantPresetsMigrationNotice,
   clearAssistantPresetsMigrationNotice,
 } from '@/lib/storage';
+import { promptSyncSettingsAfterLocalChange } from '@/lib/settingsSyncWorkflow';
 import { Plus, Trash2, Edit2, Check, X, Star } from 'lucide-react';
 
 const REQUEST_API_OPTIONS: Array<{ value: RequestApi; label: string }> = [
@@ -43,7 +45,11 @@ export default function AssistantPresetManager() {
 
   useEffect(() => {
     let cancelled = false;
-    setMounted(true);
+    const mountTimer = window.setTimeout(() => {
+      if (!cancelled) {
+        setMounted(true);
+      }
+    }, 0);
 
     const initialize = async () => {
       const loadedPresets = await getAssistantPresets();
@@ -65,6 +71,7 @@ export default function AssistantPresetManager() {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(mountTimer);
     };
   }, []);
 
@@ -180,6 +187,10 @@ export default function AssistantPresetManager() {
 
     const didSave = await saveAssistantPreset(preset);
     if (!didSave) {
+      showFloatingStatus({
+        kind: 'error',
+        message: 'Failed to save assistant preset. Your browser storage may be full.',
+      });
       alert('Failed to save assistant preset. Your browser storage may be full.');
       return;
     }
@@ -188,6 +199,11 @@ export default function AssistantPresetManager() {
     setEditing(null);
     setFormData({});
     window.dispatchEvent(new Event('settingsUpdated'));
+    showFloatingStatus({
+      kind: 'success',
+      message: 'Assistant preset saved locally.',
+    });
+    void promptSyncSettingsAfterLocalChange('Assistant preset');
   };
 
   const handleEdit = (preset: AssistantPreset) => {
@@ -199,6 +215,10 @@ export default function AssistantPresetManager() {
     if (confirm('Are you sure you want to delete this assistant preset?')) {
       const didDelete = await deleteAssistantPreset(id);
       if (!didDelete) {
+        showFloatingStatus({
+          kind: 'error',
+          message: 'Failed to delete assistant preset. Please try again.',
+        });
         alert('Failed to delete assistant preset. Please try again.');
         return;
       }
@@ -206,6 +226,11 @@ export default function AssistantPresetManager() {
       setPresets(await getAssistantPresets());
       setDefaultPresetIdState(await getDefaultPresetId());
       window.dispatchEvent(new Event('settingsUpdated'));
+      showFloatingStatus({
+        kind: 'success',
+        message: 'Assistant preset deleted locally.',
+      });
+      void promptSyncSettingsAfterLocalChange('Assistant preset');
     }
   };
 
@@ -219,6 +244,11 @@ export default function AssistantPresetManager() {
         setDefaultPresetIdState(id);
       }
       window.dispatchEvent(new Event('settingsUpdated'));
+      showFloatingStatus({
+        kind: 'success',
+        message: 'Default assistant preset updated locally.',
+      });
+      void promptSyncSettingsAfterLocalChange('Default assistant preset');
     };
     void runToggle();
   };
@@ -231,12 +261,21 @@ export default function AssistantPresetManager() {
       });
 
       if (!didSave) {
+        showFloatingStatus({
+          kind: 'error',
+          message: 'Failed to save assistant preset. Your browser storage may be full.',
+        });
         alert('Failed to save assistant preset. Your browser storage may be full.');
         return;
       }
 
       setPresets(await getAssistantPresets());
       window.dispatchEvent(new Event('settingsUpdated'));
+      showFloatingStatus({
+        kind: 'success',
+        message: 'Assistant preset visibility updated locally.',
+      });
+      void promptSyncSettingsAfterLocalChange('Assistant preset visibility');
     };
 
     void runToggle();

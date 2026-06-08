@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { CloudDownload, CloudUpload, Download, Save, Upload } from 'lucide-react';
 import type { SettingsExport, SettingsSyncConfig } from '@/types';
 import { pullSettingsFromGist, pushSettingsToGist } from '@/lib/githubGistSync';
+import { showFloatingStatus } from '@/lib/floatingStatus';
+import { normalizeSettingsSyncConfig } from '@/lib/settingsSyncWorkflow';
 import {
   getSettingsSyncConfig,
   setSettingsSyncConfig,
@@ -55,17 +57,22 @@ export default function SettingsTransfer() {
     };
   }, []);
 
+  const showStatus = (nextStatus: StatusMessage) => {
+    setStatus(nextStatus);
+    showFloatingStatus(nextStatus);
+  };
+
   const handleExport = async () => {
     try {
       const data = await buildExportData();
       downloadSettings(data);
-      setStatus({
+      showStatus({
         kind: 'success',
         message: 'Settings exported successfully.',
       });
     } catch (error) {
       console.error('Failed to export settings:', error);
-      setStatus({
+      showStatus({
         kind: 'error',
         message: 'Failed to export settings. Please try again.',
       });
@@ -94,13 +101,13 @@ export default function SettingsTransfer() {
       await saveImportedSettings(normalized);
       window.dispatchEvent(new Event(SETTINGS_UPDATED_EVENT));
 
-      setStatus({
+      showStatus({
         kind: 'success',
         message: `Imported ${normalized.apiConfigs.length} API config(s) and ${normalized.assistantPresets.length} preset(s).`,
       });
     } catch (error) {
       console.error('Failed to import settings:', error);
-      setStatus({
+      showStatus({
         kind: 'error',
         message: 'Failed to import settings. Please check the file format.',
       });
@@ -110,10 +117,7 @@ export default function SettingsTransfer() {
   };
 
   const saveSyncConfig = (nextConfig: SettingsSyncConfig): boolean => {
-    const normalized = {
-      ...nextConfig,
-      filename: nextConfig.filename.trim() || DEFAULT_SETTINGS_SYNC_FILENAME,
-    };
+    const normalized = normalizeSettingsSyncConfig(nextConfig);
     setSyncConfig(normalized);
     return setSettingsSyncConfig(normalized);
   };
@@ -127,7 +131,7 @@ export default function SettingsTransfer() {
 
   const handleSaveSyncConfig = () => {
     const didSave = saveSyncConfig(syncConfig);
-    setStatus({
+    showStatus({
       kind: didSave ? 'success' : 'error',
       message: didSave
         ? 'GitHub sync configuration saved.'
@@ -140,10 +144,7 @@ export default function SettingsTransfer() {
     setStatus(null);
 
     try {
-      const savedConfig = {
-        ...syncConfig,
-        filename: syncConfig.filename.trim() || DEFAULT_SETTINGS_SYNC_FILENAME,
-      };
+      const savedConfig = normalizeSettingsSyncConfig(syncConfig);
       const settings = await buildExportData();
       const result = await pushSettingsToGist({
         token: savedConfig.githubToken,
@@ -161,7 +162,7 @@ export default function SettingsTransfer() {
         throw new Error('Settings synced, but the returned Gist ID could not be saved locally.');
       }
 
-      setStatus({
+      showStatus({
         kind: 'success',
         message: result.didCreate
           ? `Created private Gist ${result.gistId} and synced settings.`
@@ -169,7 +170,7 @@ export default function SettingsTransfer() {
       });
     } catch (error) {
       console.error('Failed to sync settings to GitHub:', error);
-      setStatus({
+      showStatus({
         kind: 'error',
         message: error instanceof Error
           ? error.message
@@ -189,10 +190,7 @@ export default function SettingsTransfer() {
     setStatus(null);
 
     try {
-      const savedConfig = {
-        ...syncConfig,
-        filename: syncConfig.filename.trim() || DEFAULT_SETTINGS_SYNC_FILENAME,
-      };
+      const savedConfig = normalizeSettingsSyncConfig(syncConfig);
       saveSyncConfig(savedConfig);
 
       const parsed = await pullSettingsFromGist({
@@ -205,13 +203,13 @@ export default function SettingsTransfer() {
       await saveImportedSettings(normalized);
       window.dispatchEvent(new Event(SETTINGS_UPDATED_EVENT));
 
-      setStatus({
+      showStatus({
         kind: 'success',
         message: `Synced ${normalized.apiConfigs.length} API config(s) and ${normalized.assistantPresets.length} preset(s) from GitHub.`,
       });
     } catch (error) {
       console.error('Failed to sync settings from GitHub:', error);
-      setStatus({
+      showStatus({
         kind: 'error',
         message: error instanceof Error
           ? error.message
