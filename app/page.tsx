@@ -70,7 +70,11 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
-    setMounted(true);
+    const mountedTimer = window.setTimeout(() => {
+      if (!cancelled) {
+        setMounted(true);
+      }
+    }, 0);
 
     const initialize = async () => {
       const configs = await getApiConfigs();
@@ -153,6 +157,7 @@ export default function Home() {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(mountedTimer);
     };
   }, [createConversation]);
 
@@ -193,7 +198,13 @@ export default function Home() {
 
   useEffect(() => {
     if (!isCompactLayout) {
-      setIsSidebarOpen(false);
+      const timer = window.setTimeout(() => {
+        setIsSidebarOpen(false);
+      }, 0);
+
+      return () => {
+        window.clearTimeout(timer);
+      };
     }
   }, [isCompactLayout]);
 

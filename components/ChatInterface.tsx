@@ -28,6 +28,7 @@ import {
   convertToResponsesInput,
   mergeReasoningDetails,
 } from '@/lib/api';
+import { parseChatDeepLinkAction } from '@/lib/chatDeepLink';
 import { convertImagesToBase64, validateImageFile } from '@/lib/imageUtils';
 import Message from './Message';
 import { Send, Image as ImageIcon, Loader2, Square, ArrowDown } from 'lucide-react';
@@ -168,6 +169,8 @@ export default function ChatInterface({
   const persistTimerRef = useRef<number | null>(null);
   const pendingPersistRef = useRef<{ id: string; messages: ChatMessage[] } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const deepLinkActionHandledRef = useRef(false);
+  const submitPromptRef = useRef<(promptText: string) => Promise<void>>(async () => {});
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -175,9 +178,20 @@ export default function ChatInterface({
 
   useEffect(() => {
     let cancelled = false;
+    const stateSyncTimers: number[] = [];
+    const scheduleStateSync = (syncState: () => void) => {
+      const timer = window.setTimeout(() => {
+        if (!cancelled) {
+          syncState();
+        }
+      }, 0);
+      stateSyncTimers.push(timer);
+    };
 
     if (conversation) {
-      setMessages(conversation.messages);
+      scheduleStateSync(() => {
+        setMessages(conversation.messages);
+      });
 
       const loadConfig = async () => {
         const config = await getApiConfig(conversation.apiConfigId);
@@ -197,28 +211,40 @@ export default function ChatInterface({
         };
         void loadPreset();
       } else {
-        setAssistantPreset(null);
+        scheduleStateSync(() => {
+          setAssistantPreset(null);
+        });
       }
     } else {
-      setMessages([]);
-      setApiConfig(null);
-      setAssistantPreset(null);
+      scheduleStateSync(() => {
+        setMessages([]);
+        setApiConfig(null);
+        setAssistantPreset(null);
+      });
     }
 
     const conversationId = conversation?.id ?? null;
     activeConversationIdRef.current = conversationId;
 
     if (!conversation) {
-      setIsLoading(false);
+      scheduleStateSync(() => {
+        setMessages([]);
+        setApiConfig(null);
+        setAssistantPreset(null);
+        setIsLoading(false);
+      });
       previousConversationIdRef.current = null;
       return () => {
         cancelled = true;
+        stateSyncTimers.forEach((timer) => window.clearTimeout(timer));
       };
     }
 
     if (conversationId !== previousConversationIdRef.current) {
       autoScrollEnabledRef.current = true;
-      setIsAutoScrollEnabled(true);
+      scheduleStateSync(() => {
+        setIsAutoScrollEnabled(true);
+      });
       previousConversationIdRef.current = conversationId;
     }
 
@@ -226,12 +252,17 @@ export default function ChatInterface({
       streamingConversationIdRef.current === conversation.id
       && isStreamingRef.current
     ) {
-      setIsLoading(true);
+      scheduleStateSync(() => {
+        setIsLoading(true);
+      });
     } else {
-      setIsLoading(false);
+      scheduleStateSync(() => {
+        setIsLoading(false);
+      });
     }
     return () => {
       cancelled = true;
+      stateSyncTimers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [conversation]);
 
@@ -727,6 +758,62 @@ export default function ChatInterface({
     }
   };
 
+  const submitPrompt = async (promptText: string) => {
+    const trimmedInput = promptText.trim();
+    if (!trimmedInput || !conversation || isLoading) return;
+
+    if (!apiConfig) {
+      const resolvedConfig = await getApiConfig(conversation.apiConfigId);
+      if (!resolvedConfig) {
+        alert('Please select an API configuration first');
+        return;
+      }
+      setApiConfig(resolvedConfig);
+    }
+
+    const userMessage: ChatMessage = {
+      id: generateId(),
+      role: 'user',
+      content: trimmedInput,
+      imageUrls: draftImages.length > 0 ? draftImages : undefined,
+      timestamp: Date.now(),
+    };
+
+    const newMessages = [...messagesRef.current, userMessage];
+    setMessages(newMessages);
+    setInput('');
+    setDraftImages([]);
+    await startAssistantResponse(newMessages, trimmedInput);
+  };
+
+  useEffect(() => {
+    submitPromptRef.current = submitPrompt;
+  });
+
+  useEffect(() => {
+    if (deepLinkActionHandledRef.current || !conversation || !apiConfig) {
+      return;
+    }
+
+    const action = parseChatDeepLinkAction(window.location.href);
+    if (!action) {
+      return;
+    }
+
+    deepLinkActionHandledRef.current = true;
+    const timer = window.setTimeout(() => {
+      setInput(action.prompt);
+
+      if (action.autoSend) {
+        void submitPromptRef.current(action.prompt);
+      }
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [apiConfig, conversation]);
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) {
@@ -773,32 +860,7 @@ export default function ChatInterface({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    const trimmedInput = input.trim();
-    if (!trimmedInput || !conversation || isLoading) return;
-
-    if (!apiConfig) {
-      const resolvedConfig = await getApiConfig(conversation.apiConfigId);
-      if (!resolvedConfig) {
-        alert('Please select an API configuration first');
-        return;
-      }
-      setApiConfig(resolvedConfig);
-    }
-
-    const userMessage: ChatMessage = {
-      id: generateId(),
-      role: 'user',
-      content: trimmedInput,
-      imageUrls: draftImages.length > 0 ? draftImages : undefined,
-      timestamp: Date.now(),
-    };
-
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setInput('');
-    setDraftImages([]);
-    await startAssistantResponse(newMessages, trimmedInput);
+    await submitPrompt(input);
   };
 
   const handleRegenerate = async (messageId: string) => {

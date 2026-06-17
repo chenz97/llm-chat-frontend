@@ -16,6 +16,7 @@ The repository is currently in a local-first MVP hardening phase. The primary en
 - Multi-image upload and paste support for multimodal prompts, with legacy single-image conversation compatibility.
 - Settings import/export and a raw request debugging script.
 - Manual GitHub Gist settings sync from the Import/Export settings page.
+- URL deep-link prompt fill and autosend support for command-driven browser launch workflows.
 - Baseline project documentation under `docs/`.
 - README alignment with the current IndexedDB-first storage model, proxy behavior, and repository structure.
 

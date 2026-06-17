@@ -22,15 +22,21 @@ export default function ImageLightbox({ src, alt = 'Image', isOpen, onClose }: I
   }, [onClose]);
 
   useEffect(() => {
+    let resetTimer: number | null = null;
+
     if (isOpen) {
       document.addEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'hidden';
-      // Reset transform when opening
-      setScale(1);
-      setRotation(0);
+      resetTimer = window.setTimeout(() => {
+        setScale(1);
+        setRotation(0);
+      }, 0);
     }
 
     return () => {
+      if (resetTimer !== null) {
+        window.clearTimeout(resetTimer);
+      }
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
     };

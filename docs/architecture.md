@@ -24,6 +24,12 @@ Primary top-level directories:
 - startup restoration logic,
 - draft-conversation creation before first persistence.
 
+The page can also be opened with chat deep-link parameters that are consumed by
+`components/ChatInterface.tsx` after startup restoration is complete. The
+supported parameters are `prompt=<text>` for filling the composer and
+`autoSend=1` for immediately sending that prompt through the normal chat submit
+flow.
+
 The page composes four major UI areas:
 
 - `components/ConversationSidebar.tsx`: loads saved conversations, supports keyword search, and handles deletion and selection.
@@ -80,6 +86,12 @@ This storage module also exposes application-level operations such as `getCurren
 ## Chat Request And Streaming Flow
 
 The end-to-end chat path is split across `components/ChatInterface.tsx`, `lib/api.ts`, and optionally `app/api/chat/completions/route.ts`.
+
+`lib/chatDeepLink.ts` contains the parser for URL-driven chat actions. It
+normalizes `prompt` and `autoSend` from either query string or hash parameters,
+ignores empty prompts, and lets query-string values take precedence over hash
+values. `ChatInterface` applies the parsed action once per page load only after
+both the active conversation and API configuration are available.
 
 Flow for a normal message:
 

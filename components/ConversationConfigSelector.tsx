@@ -43,7 +43,11 @@ export default function ConversationConfigSelector({
 
   useEffect(() => {
     let cancelled = false;
-    setMounted(true);
+    const mountedTimer = window.setTimeout(() => {
+      if (!cancelled) {
+        setMounted(true);
+      }
+    }, 0);
 
     const loadSettings = async () => {
       const presetsData = await getAssistantPresets();
@@ -58,6 +62,7 @@ export default function ConversationConfigSelector({
 
     return () => {
       cancelled = true;
+      window.clearTimeout(mountedTimer);
     };
   }, []);
 
