@@ -46,3 +46,43 @@ The application currently supports local-first text and image conversations thro
 - Saved user and assistant audio records remain visible and replayable after the turn completes.
 - The generated Chat Completions request includes the selected system prompt, current Model Parameters, prior user audio history, assistant text history, and current user audio.
 - Normal text streaming remains operational after the feature is added.
+
+## Follow-Up Requirements: Browser VAD Speech Segment Extraction
+
+### Problem Context
+
+The initial voice-call implementation detects speech by measuring microphone RMS volume against a fixed threshold. This is simple and local, but it confuses loud non-speech noise with user speech, depends heavily on microphone gain and room noise, and can clip speech boundaries because the recording segment starts only after the threshold has already been crossed.
+
+The follow-up must replace the speech-segment extraction path with a real browser-side voice activity detector (VAD). The selected direction is the more complete integration model: the VAD/audio pipeline directly produces the final user speech segment as PCM audio, and the app encodes that segment to WAV before saving and sending it. This avoids relying on `MediaRecorder` containers for user-turn extraction.
+
+### Functional Requirements
+
+- Voice-call mode must continue to run fully in the browser without adding a backend transcription, realtime, or TTS service.
+- The app must use a real VAD model/library to classify microphone PCM frames as speech or non-speech instead of using fixed RMS volume as the primary turn detector.
+- The VAD path must directly produce the user speech segment audio data used for upload.
+- The final user audio record must remain a WAV `AudioRecord` compatible with the existing Chat Completions `input_audio` request builder.
+- The user-visible call flow must remain serial: listen, detect/record user speech, wait for the model, play model audio, then listen again.
+- The UI states must continue to distinguish listening, recording, waiting for model, playing model audio, error, and idle.
+- Speech-start handling must preserve the beginning of the utterance by including an appropriate pre-speech padding window from buffered PCM frames.
+- Speech-end handling must avoid cutting off trailing syllables by including an appropriate post-speech padding window.
+- The VAD implementation must avoid submitting empty or near-empty audio segments.
+- VAD model or WASM asset loading failures must not silently break call mode. The app must either show a clear call-state error or fall back to the existing RMS/MediaRecorder path if a safe fallback is implemented.
+- Exiting call mode must stop microphone tracks, audio processing nodes, timers, VAD work, playback, and any in-flight audio request.
+- Existing text chat, image upload, text-to-audio-model behavior, saved audio replay, request parameter merging, proxy support, and audio request parsing must keep working.
+
+### Non-Goals
+
+- Do not implement speaker recognition or verify that speech belongs to a specific person.
+- Do not add server-side VAD, transcription, or preprocessing.
+- Do not add barge-in or interrupt model playback in this change.
+- Do not add a full voice settings page in this change.
+- Do not change the upstream audio request contract from WAV `input_audio`.
+
+### Success Criteria
+
+- In a browser call session, user speech starts and ends through VAD-driven detection, not fixed RMS threshold detection.
+- The persisted user `AudioRecord` contains the VAD-produced speech segment encoded as WAV and remains replayable in message history.
+- The speech segment includes speech onset and trailing speech padding so normal short utterances are not visibly clipped.
+- A complete voice turn still sends the current user audio to the existing Chat Completions audio request path and can save/play the assistant audio reply.
+- VAD initialization failure produces an explicit recoverable behavior: either a visible call error or a documented fallback to the previous RMS/MediaRecorder path.
+- `npm test`, `npm run build`, and the strongest practical browser/manual workflow validation for microphone-dependent behavior have been run and recorded.

@@ -104,12 +104,13 @@ Flow for a normal message:
 
 Flow for a voice-call turn:
 
-1. `ChatInterface` enters call mode from the composer, requests microphone access, creates a Web Audio analyser, and shows the current call state.
-2. While the call state is listening, the analyser checks volume periodically. A speech-like level starts `MediaRecorder`; 3 seconds below the threshold stops recording and submits the segment.
-3. Browser-recorded audio is normalized into a WAV base64 `AudioRecord` before it is saved or sent upstream, because Chat Completions `input_audio` supports `wav` and `mp3` rather than every browser recording container.
-4. `lib/audioChat.ts` builds a streaming Chat Completions request with `modalities: ["text", "audio"]`, default Cedar PCM16 audio output settings, preset Model Parameter overrides, the preset system prompt, text history, prior user audio history, and the current user audio.
-5. The optional proxy route forwards this streaming audio request through the same route used by text streaming, while `lib/audioChat.ts` parses audio-specific SSE chunks.
-6. The returned assistant text and audio are saved as a normal assistant message with audio records. The browser plays the assistant audio, then returns to listening if call mode is still active.
+1. `ChatInterface` enters call mode from the composer, loads the browser VAD assets from `public/vad/`, requests microphone access through the VAD library, and shows the current call state.
+2. While the call state is listening, the VAD classifies microphone PCM frames. Speech start moves the UI to recording; speech end returns a 16 kHz `Float32Array` segment that already includes configured pre-speech and trailing redemption padding.
+3. The VAD-produced PCM segment is encoded into a mono 16-bit WAV base64 `AudioRecord` before it is saved or sent upstream, because Chat Completions `input_audio` supports `wav` and `mp3`.
+4. If the VAD dependency or local assets cannot initialize, `ChatInterface` falls back to the earlier Web Audio analyser plus `MediaRecorder` path, where periodic RMS volume checks start recording and 3 seconds below the threshold submits the segment.
+5. `lib/audioChat.ts` builds a streaming Chat Completions request with `modalities: ["text", "audio"]`, default Cedar PCM16 audio output settings, preset Model Parameter overrides, the preset system prompt, text history, prior user audio history, and the current user audio.
+6. The optional proxy route forwards this streaming audio request through the same route used by text streaming, while `lib/audioChat.ts` parses audio-specific SSE chunks.
+7. The returned assistant text and audio are saved as a normal assistant message with audio records. The browser plays the assistant audio, then resumes VAD listening if call mode is still active.
 
 `app/api/chat/completions/route.ts` is intentionally narrow. It validates `baseUrl`, `apiKey`, and `request`, reads the preset-selected request API mode, resolves either the upstream `/chat/completions` or `/responses` endpoint, forwards the request server-side, and streams the upstream body back to the browser.
 

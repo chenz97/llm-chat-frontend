@@ -40,6 +40,11 @@ import {
   resolveTrimmedFrameCount,
   shouldDecodeBeforeUpload,
 } from '@/lib/audioTrim';
+import {
+  calculatePcmDurationMs,
+  float32PcmToWavBuffer,
+  shouldSubmitVadSegment,
+} from '@/lib/audioSegment';
 import { convertImagesToBase64, validateImageFile } from '@/lib/imageUtils';
 import Message from './Message';
 import { Send, Image as ImageIcon, Loader2, Square, ArrowDown, Phone, PhoneOff } from 'lucide-react';
@@ -78,10 +83,20 @@ type CallStatus = 'idle' | 'listening' | 'recording' | 'waiting_for_model' | 'pl
 type AudioContextWindow = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext;
 };
+type MicVadInstance = {
+  start?: () => Promise<void>;
+  pause: () => Promise<void>;
+  destroy: () => Promise<void>;
+};
 
 const SILENCE_SUBMIT_MS = 3000;
 const AUDIO_LEVEL_INTERVAL_MS = 120;
 const SPEECH_LEVEL_THRESHOLD = 0.035;
+const VAD_SAMPLE_RATE = 16000;
+const VAD_ASSET_PATH = '/vad/';
+const VAD_PRE_SPEECH_PAD_MS = 800;
+const VAD_REDEMPTION_MS = 1200;
+const VAD_MIN_SPEECH_MS = 250;
 
 const isAudioModel = (model: string) => model.toLowerCase().includes('audio');
 
@@ -209,6 +224,7 @@ export default function ChatInterface({
   const callStatusRef = useRef<CallStatus>('idle');
   const callAbortControllerRef = useRef<AbortController | null>(null);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
+  const micVadRef = useRef<MicVadInstance | null>(null);
   const releaseCallResourcesRef = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -440,10 +456,38 @@ export default function ChatInterface({
     window.dispatchEvent(new Event('conversationsUpdated'));
   };
 
+  const pauseVadListening = async () => {
+    const vad = micVadRef.current;
+    if (!vad) return;
+
+    try {
+      await vad.pause();
+    } catch (error) {
+      console.error('Failed to pause VAD listening:', error);
+    }
+  };
+
+  const resumeVadListening = async (): Promise<boolean> => {
+    const vad = micVadRef.current;
+    if (!vad || !isCallModeRef.current) return true;
+
+    try {
+      await vad.start?.();
+      return true;
+    } catch (error) {
+      console.error('Failed to resume VAD listening:', error);
+      setCallState('error', '语音检测恢复失败');
+      return false;
+    }
+  };
+
   const playAssistantAudioAndResume = async (audioRecord?: AudioRecord) => {
     if (!audioRecord) {
       if (isCallModeRef.current) {
-        setCallState('listening', '正在听用户说话');
+        const didResume = await resumeVadListening();
+        if (didResume) {
+          setCallState('listening', '正在听用户说话');
+        }
       }
       return;
     }
@@ -466,7 +510,10 @@ export default function ChatInterface({
 
     playbackAudioRef.current = null;
     if (isCallModeRef.current) {
-      setCallState('listening', '正在听用户说话');
+      const didResume = await resumeVadListening();
+      if (didResume) {
+        setCallState('listening', '正在听用户说话');
+      }
     }
   };
 
@@ -786,37 +833,129 @@ export default function ChatInterface({
     }
   };
 
+  const startFallbackAudioLevelMode = async (statusMessage = '正在听用户说话') => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+    const audioWindow = window as AudioContextWindow;
+    const AudioContextClass = audioWindow.AudioContext || audioWindow.webkitAudioContext;
+    if (!AudioContextClass) {
+      throw new Error('AudioContext is not available');
+    }
+    const audioContext = new AudioContextClass();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 1024;
+    source.connect(analyser);
+
+    mediaStreamRef.current = stream;
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+    isCallModeRef.current = true;
+    setIsCallMode(true);
+    setCallState('listening', statusMessage);
+    audioLevelTimerRef.current = window.setInterval(readAudioLevel, AUDIO_LEVEL_INTERVAL_MS);
+  };
+
+  const createUserAudioRecordFromPcm = (
+    samples: Float32Array,
+    sampleRate: number
+  ): AudioRecord => ({
+    id: generateId(),
+    role: 'user',
+    mimeType: 'audio/wav',
+    format: 'wav',
+    data: arrayBufferToBase64(float32PcmToWavBuffer(samples, sampleRate)),
+    durationMs: calculatePcmDurationMs(samples, sampleRate),
+    createdAt: Date.now(),
+  });
+
+  const startVadCallMode = async () => {
+    const { MicVAD } = await import('@ricky0123/vad-web');
+    const vad = await MicVAD.new({
+      model: 'v5',
+      baseAssetPath: VAD_ASSET_PATH,
+      onnxWASMBasePath: VAD_ASSET_PATH,
+      startOnLoad: false,
+      preSpeechPadMs: VAD_PRE_SPEECH_PAD_MS,
+      redemptionMs: VAD_REDEMPTION_MS,
+      minSpeechMs: VAD_MIN_SPEECH_MS,
+      submitUserSpeechOnPause: false,
+      getStream: async () => navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      }),
+      onSpeechStart: () => {
+        if (!isCallModeRef.current || callStatusRef.current !== 'listening') return;
+        setCallState('recording', '正在录制用户语音');
+      },
+      onSpeechEnd: (audio: Float32Array) => {
+        if (!isCallModeRef.current || callStatusRef.current !== 'recording') return;
+
+        if (!shouldSubmitVadSegment(audio, VAD_SAMPLE_RATE)) {
+          setCallState('listening', '正在听用户说话');
+          return;
+        }
+
+        setCallState('waiting_for_model', '正在等待模型回复');
+        void pauseVadListening();
+        void Promise.resolve(createUserAudioRecordFromPcm(audio, VAD_SAMPLE_RATE))
+          .then((record) => submitAudioTurn(record))
+          .catch((error) => {
+            console.error('Failed to create VAD user audio record:', error);
+            setCallState('error', '录音保存失败');
+          });
+      },
+      onVADMisfire: () => {
+        if (!isCallModeRef.current || callStatusRef.current !== 'recording') return;
+        setCallState('listening', '正在听用户说话');
+      },
+    });
+
+    micVadRef.current = vad;
+    isCallModeRef.current = true;
+    setIsCallMode(true);
+    setCallState('listening', '正在听用户说话');
+    try {
+      await vad.start?.();
+    } catch (error) {
+      micVadRef.current = null;
+      isCallModeRef.current = false;
+      setIsCallMode(false);
+      await vad.destroy().catch(() => {});
+      throw error;
+    }
+  };
+
   const startCallMode = async () => {
     if (isCallModeRef.current || !conversation || isLoading) return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const audioWindow = window as AudioContextWindow;
-      const AudioContextClass = audioWindow.AudioContext || audioWindow.webkitAudioContext;
-      if (!AudioContextClass) {
-        throw new Error('AudioContext is not available');
-      }
-      const audioContext = new AudioContextClass();
-      const source = audioContext.createMediaStreamSource(stream);
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 1024;
-      source.connect(analyser);
-
-      mediaStreamRef.current = stream;
-      audioContextRef.current = audioContext;
-      analyserRef.current = analyser;
-      setIsCallMode(true);
-      setCallState('listening', '正在听用户说话');
-      audioLevelTimerRef.current = window.setInterval(readAudioLevel, AUDIO_LEVEL_INTERVAL_MS);
+      await startVadCallMode();
     } catch (error) {
-      console.error('Failed to start call mode:', error);
-      setIsCallMode(true);
-      setCallState('error', '无法访问麦克风，请检查浏览器权限');
+      console.error('Failed to start VAD call mode, falling back to audio level detection:', error);
+      try {
+        await startFallbackAudioLevelMode('正在听用户说话（VAD 不可用，已使用音量检测）');
+      } catch (fallbackError) {
+        console.error('Failed to start call mode:', fallbackError);
+        isCallModeRef.current = true;
+        setIsCallMode(true);
+        setCallState('error', '无法访问麦克风，请检查浏览器权限');
+      }
     }
   };
 
   const stopCallMode = () => {
     releaseCallResources();
+    isCallModeRef.current = false;
     setIsCallMode(false);
     setCallState('idle', '');
   };
@@ -891,6 +1030,15 @@ export default function ChatInterface({
     stopPlaybackAudio();
     callAbortControllerRef.current?.abort();
     callAbortControllerRef.current = null;
+
+    const vad = micVadRef.current;
+    micVadRef.current = null;
+    if (vad) {
+      void vad.pause()
+        .catch(() => {})
+        .then(() => vad.destroy())
+        .catch(() => {});
+    }
 
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
