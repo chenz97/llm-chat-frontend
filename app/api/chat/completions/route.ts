@@ -6,6 +6,7 @@ interface ProxyRequestBody {
   baseUrl?: unknown;
   apiKey?: unknown;
   requestApi?: unknown;
+  stream?: unknown;
   request?: unknown;
 }
 
@@ -43,6 +44,7 @@ export async function POST(nextRequest: NextRequest): Promise<Response> {
     const apiKey = typeof payload.apiKey === 'string' ? payload.apiKey.trim() : '';
     const requestApi = normalizeRequestApi(payload.requestApi);
     const chatRequest = payload.request;
+    const shouldStream = payload.stream !== false;
 
     if (!baseUrl || !apiKey || !isRecord(chatRequest)) {
       return new Response('Missing required fields: baseUrl, apiKey, request', {
@@ -62,7 +64,7 @@ export async function POST(nextRequest: NextRequest): Promise<Response> {
         },
         body: JSON.stringify({
           ...(chatRequest as ChatCompletionRequest | ResponsesRequest),
-          stream: true,
+          stream: shouldStream,
         }),
         signal: nextRequest.signal,
       }
@@ -84,12 +86,14 @@ export async function POST(nextRequest: NextRequest): Promise<Response> {
       });
     }
 
-    const contentType = upstreamResponse.headers.get('content-type') || 'text/event-stream; charset=utf-8';
+    const contentType = upstreamResponse.headers.get('content-type') || (
+      shouldStream ? 'text/event-stream; charset=utf-8' : 'application/json; charset=utf-8'
+    );
     return new Response(upstreamResponse.body, {
       status: upstreamResponse.status,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'no-cache, no-transform',
+        ...(shouldStream ? { 'Cache-Control': 'no-cache, no-transform' } : {}),
       },
     });
   } catch (error) {

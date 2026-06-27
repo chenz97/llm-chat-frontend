@@ -77,6 +77,61 @@ body {
   animation: message-in 180ms ease-out;
 }
 
+.call-status-pulse {
+  position: relative;
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: 0 0 auto;
+  border-radius: 9999px;
+  background: #2563eb;
+}
+
+.call-status-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -0.35rem;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  color: #2563eb;
+  opacity: 0.28;
+  animation: call-pulse 1.35s ease-out infinite;
+}
+
+.call-status-pulse-recording {
+  background: #dc2626;
+}
+
+.call-status-pulse-recording::after {
+  color: #dc2626;
+  animation-duration: 780ms;
+}
+
+.call-status-pulse-waiting_for_model {
+  background: #7c3aed;
+}
+
+.call-status-pulse-waiting_for_model::after {
+  color: #7c3aed;
+}
+
+.call-status-pulse-playing_model_audio {
+  background: #059669;
+}
+
+.call-status-pulse-playing_model_audio::after {
+  color: #059669;
+  animation-duration: 960ms;
+}
+
+.call-status-pulse-error {
+  background: #dc2626;
+}
+
+.call-status-pulse-idle::after,
+.call-status-pulse-error::after {
+  animation: none;
+}
+
 @keyframes app-shell-in {
   from {
     opacity: 0;
@@ -99,9 +154,21 @@ body {
   }
 }
 
+@keyframes call-pulse {
+  from {
+    opacity: 0.36;
+    transform: scale(0.72);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.65);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-shell,
-  .message-row {
+  .message-row,
+  .call-status-pulse::after {
     animation: none;
   }
 }

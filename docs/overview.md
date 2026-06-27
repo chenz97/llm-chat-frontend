@@ -2,14 +2,14 @@
 
 ## Purpose
 
-`llm-chat-frontend` is a local-first web client for OpenAI-compatible chat APIs. The application gives a single user a browser UI for configuring providers, selecting models, saving reusable assistant presets, running multi-turn conversations, attaching one or more images to a user turn, and reviewing streamed responses without requiring a dedicated backend for normal use.
+`llm-chat-frontend` is a local-first web client for OpenAI-compatible chat APIs. The application gives a single user a browser UI for configuring providers, selecting models, saving reusable assistant presets, running multi-turn conversations, attaching one or more images or audio turns, and reviewing streamed or audio responses without requiring a dedicated backend for normal use.
 
 The current implementation is centered on practical experimentation with different providers and models. The browser stores API settings, presets, and conversation history locally so the user can reopen the app and continue previous chats on the same device. Requests still default to chat completions, but each assistant preset can now opt into the OpenAI Responses API when the target provider supports it.
 
 ## Core User Jobs
 
 - Configure one or more provider endpoints with base URL, API key, and available model IDs.
-- Start a conversation, pick an assistant preset and model, and send text prompts or multimodal prompts with one or more uploaded images.
+- Start a conversation, pick an assistant preset and model, and send text prompts, multimodal prompts with one or more uploaded images, or phone-like audio turns with supported Chat Completions audio models.
 - Read streamed assistant output with markdown, code highlighting, math rendering, token usage, reasoning text, and optional raw SSE event inspection.
 - Regenerate or edit messages while keeping the conversation history in local browser storage.
 - Export and import API settings and assistant presets as JSON backups.
@@ -25,6 +25,7 @@ The codebase currently implements the following stable product scope:
 - Conversation storage, conversation search, current-conversation restoration, and draft conversation creation before first persistence.
 - Streaming chat responses with partial rendering, cancellation, final persistence, and recovery-friendly interruption handling that preserves already received assistant output across both chat-completions and responses request modes.
 - User image upload and paste support using base64 `image_url` message content, including multiple images in a single user turn.
+- Voice-call mode for Chat Completions audio models. The browser records user speech, auto-submits after 3 seconds of silence, sends full available audio history, plays returned assistant audio, and keeps every audio record replayable in the conversation.
 - Markdown rendering with GitHub Flavored Markdown, KaTeX math, and syntax highlighting.
 - A server-side forwarding route at `/api/chat/completions` for deployments where browser-to-provider requests are undesirable.
 - JSON import/export for API configurations and assistant presets.
@@ -41,7 +42,7 @@ The codebase currently implements the following stable product scope:
 - Mobile browsers may suspend or terminate in-flight streaming requests when the page enters the background or the device is locked. The app mitigates this by preserving partial output, but it does not guarantee uninterrupted background streaming.
 - API keys are entered in the browser UI and stored locally in the browser. When the optional Vercel proxy path is used, the browser still sends the saved API key to the application server for forwarding.
 - GitHub Gist sync uses a browser-stored GitHub token and direct GitHub REST API calls; the token is not included in settings export files.
-- Automated coverage is currently limited to focused Node tests for settings transfer logic; broader UI and chat-flow validation still relies on build, lint, and manual checks.
+- Automated coverage is currently limited to focused Node tests for settings transfer, deep links, sync helpers, and audio request construction. Broader UI, microphone, and chat-flow validation still relies on build, lint, and manual/browser checks.
 
 ## Non-Goals
 
@@ -52,6 +53,7 @@ The current implementation does not aim to provide:
 - Server-side secret management, key vault integration, or tenant isolation.
 - Retrieval-augmented generation, document indexing, or knowledge-base features.
 - Workflow orchestration, tool calling UI, agent management, or OpenAI API surfaces beyond chat-completions and responses.
+- Realtime API, separate transcription, or separate TTS integrations for voice mode.
 - Provider-specific SDK integrations beyond the common OpenAI-compatible HTTP contract.
 - Formal observability, analytics, or production operations dashboards.
 

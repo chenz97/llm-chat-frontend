@@ -8,6 +8,7 @@ A local-first chat interface for OpenAI-compatible chat APIs. The app is built w
 - **Assistant Presets**: Save reusable assistant configurations with custom system prompts, model parameters, optional provider binding, a per-preset Chat Completions vs Responses API selector, and an optional server-proxy toggle
 - **Rich Message Support**:
   - Text messages with streaming responses
+  - Phone-like voice mode for Chat Completions audio models, with microphone silence detection, visible call state, saved audio history, and per-message audio replay
   - Reasoning text, token usage, and raw streamed response inspection when provided by the upstream API
   - Image uploads (base64-encoded following OpenAI's format)
   - Markdown rendering with LaTeX math support
@@ -124,7 +125,17 @@ Notes:
 1. Click "New Chat" in the sidebar
 2. Select your API configuration and optionally an assistant preset
 3. Type your message or upload an image
-4. Press Enter or click Send
+4. Press Enter or click Send, or click the phone button to start voice-call mode with a compatible Chat Completions audio model
+
+### Voice Call Mode
+
+Voice call mode uses the current conversation's API configuration, selected model, assistant preset, system prompt, and Model Parameters. The browser listens for speech, records the user turn, submits it after 3 seconds of silence, waits for the model response, plays returned assistant audio, then listens again.
+
+Notes:
+- Use a Chat Completions audio-capable model such as `gpt-audio-mini`.
+- The default output audio config is `audio.voice = "alloy"` and `audio.format = "pcm16"`.
+- Preset Model Parameters can override the audio config, for example `{ "audio": { "voice": "verse", "format": "mp3" } }`.
+- The app stores audio records locally and sends the full available audio history on later voice turns.
 
 ### Image Support
 
@@ -149,7 +160,7 @@ To send images with your messages:
 
 ## API Compatibility
 
-This application is compatible with providers that expose OpenAI-compatible Chat Completions and, when enabled per preset, OpenAI-compatible Responses endpoints:
+This application is compatible with providers that expose OpenAI-compatible Chat Completions and, when enabled per preset, OpenAI-compatible Responses endpoints. Voice call mode additionally requires a Chat Completions model/provider that supports audio input and audio output:
 
 - OpenAI API
 - Azure OpenAI
@@ -206,6 +217,7 @@ llm-chat-frontend/
 │   └── SettingsTransfer.tsx
 ├── lib/                   # Utility functions
 │   ├── api.ts            # API client for streaming
+│   ├── audioChat.ts      # Streaming Chat Completions audio request helpers
 │   ├── errorUtils.ts     # Error normalization helpers
 │   ├── imageUtils.ts     # Image handling utilities
 │   └── storage.ts        # IndexedDB and browser storage management

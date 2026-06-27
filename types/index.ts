@@ -4,14 +4,21 @@ export type RequestApi = 'chat_completions' | 'responses';
 export interface Message {
   role: 'system' | 'user' | 'assistant';
   content: string | MessageContent[];
+  audio?: {
+    id: string;
+  };
   reasoning_details?: ReasoningDetail[];
 }
 
 export interface MessageContent {
-  type: 'text' | 'image_url';
+  type: 'text' | 'image_url' | 'input_audio';
   text?: string;
   image_url?: {
     url: string;
+  };
+  input_audio?: {
+    data: string;
+    format: 'wav' | 'mp3';
   };
 }
 
@@ -56,6 +63,17 @@ export interface ProviderMetadata {
   provider?: string;
   cacheControl?: unknown;
   usageDetails?: Record<string, unknown>;
+}
+
+export interface AudioRecord {
+  id: string;
+  role: 'user' | 'assistant';
+  mimeType: string;
+  format: 'wav' | 'mp3' | 'pcm16';
+  data: string;
+  durationMs?: number;
+  providerAudioId?: string;
+  createdAt: number;
 }
 
 // App Types
@@ -106,6 +124,7 @@ export interface ChatMessage {
   reasoning?: string;
   reasoningDetails?: ReasoningDetail[];
   responseId?: string;
+  audioRecords?: AudioRecord[];
   imageUrls?: string[]; // For user uploaded images
   imageUrl?: string; // Legacy single-image fallback for older conversations
   rawResponse?: string;

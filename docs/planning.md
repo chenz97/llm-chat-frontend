@@ -17,6 +17,7 @@ The repository is currently in a local-first MVP hardening phase. The primary en
 - Settings import/export and a raw request debugging script.
 - Manual GitHub Gist settings sync from the Import/Export settings page.
 - URL deep-link prompt fill and autosend support for command-driven browser launch workflows.
+- Chat Completions audio call mode with microphone silence detection, visible call states, full audio-history requests, and per-message audio replay controls.
 - Baseline project documentation under `docs/`.
 - README alignment with the current IndexedDB-first storage model, proxy behavior, and repository structure.
 
@@ -42,6 +43,7 @@ The following items are reasonable next candidates, but they are not yet committ
 
 - Automated tests currently cover only focused settings-transfer logic, so regressions in browser storage, UI flows, and streaming parsing are still likely to be discovered manually.
 - Browser storage limits can prevent saving large histories or many image-heavy conversations.
+- Browser storage and provider request limits can be reached faster by full-history audio conversations because audio payloads are stored inline and resent each voice turn.
 - OpenAI-compatible providers do not emit identical SSE payloads, so reasoning and usage extraction may drift by provider.
 - Browser and OS background policies, especially on Android lock screen, can still terminate active streaming requests; the current mitigation preserves partial output but cannot keep the connection alive in every browser.
 - The server proxy simplifies networking for some deployments, but it does not remove the need to trust the application server with API keys.

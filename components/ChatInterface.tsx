@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import {
+  AudioRecord,
   Conversation,
   ChatMessage,
   ApiConfig,
@@ -28,10 +29,14 @@ import {
   convertToResponsesInput,
   mergeReasoningDetails,
 } from '@/lib/api';
+import {
+  buildAudioChatCompletionRequest,
+  sendAudioChatCompletion,
+} from '@/lib/audioChat';
 import { parseChatDeepLinkAction } from '@/lib/chatDeepLink';
 import { convertImagesToBase64, validateImageFile } from '@/lib/imageUtils';
 import Message from './Message';
-import { Send, Image as ImageIcon, Loader2, Square, ArrowDown } from 'lucide-react';
+import { Send, Image as ImageIcon, Loader2, Square, ArrowDown, Phone, PhoneOff } from 'lucide-react';
 
 interface ChatInterfaceProps {
   conversation: Conversation | null;
@@ -62,6 +67,15 @@ const normalizeModelParameters = (parameters?: ModelParameters): ModelParameters
 const normalizeRequestApi = (value?: RequestApi): RequestApi => (
   value === 'responses' ? 'responses' : 'chat_completions'
 );
+
+type CallStatus = 'idle' | 'listening' | 'recording' | 'waiting_for_model' | 'playing_model_audio' | 'error';
+type AudioContextWindow = Window & typeof globalThis & {
+  webkitAudioContext?: typeof AudioContext;
+};
+
+const SILENCE_SUBMIT_MS = 3000;
+const AUDIO_LEVEL_INTERVAL_MS = 120;
+const SPEECH_LEVEL_THRESHOLD = 0.035;
 
 const normalizeRequestParameters = (
   requestApi: RequestApi,
@@ -154,6 +168,9 @@ export default function ChatInterface({
   const [apiConfig, setApiConfig] = useState<ApiConfig | null>(null);
   const [assistantPreset, setAssistantPreset] = useState<AssistantPreset | null>(null);
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
+  const [isCallMode, setIsCallMode] = useState(false);
+  const [callStatus, setCallStatus] = useState<CallStatus>('idle');
+  const [callStatusMessage, setCallStatusMessage] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -171,10 +188,31 @@ export default function ChatInterface({
   const abortControllerRef = useRef<AbortController | null>(null);
   const deepLinkActionHandledRef = useRef(false);
   const submitPromptRef = useRef<(promptText: string) => Promise<void>>(async () => {});
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioLevelTimerRef = useRef<number | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const silenceStartedAtRef = useRef<number | null>(null);
+  const isCallModeRef = useRef(false);
+  const callStatusRef = useRef<CallStatus>('idle');
+  const callAbortControllerRef = useRef<AbortController | null>(null);
+  const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
+  const releaseCallResourcesRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    isCallModeRef.current = isCallMode;
+  }, [isCallMode]);
+
+  useEffect(() => {
+    callStatusRef.current = callStatus;
+  }, [callStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -299,6 +337,25 @@ export default function ChatInterface({
     scrollToBottom('auto');
   };
 
+  const callStatusLabel = (() => {
+    switch (callStatus) {
+      case 'listening':
+        return '正在听用户说话';
+      case 'recording':
+        return '正在录制用户语音';
+      case 'waiting_for_model':
+        return '正在等待模型回复';
+      case 'playing_model_audio':
+        return '正在播放模型回复';
+      case 'error':
+        return '通话出错';
+      default:
+        return '';
+    }
+  })();
+
+  const callStatusHint = callStatusMessage || callStatusLabel;
+
   const appendDraftImages = async (files: File[]) => {
     const validFiles = files.filter((file) => validateImageFile(file));
     if (validFiles.length === 0) {
@@ -374,6 +431,268 @@ export default function ChatInterface({
     window.dispatchEvent(new Event('conversationsUpdated'));
   };
 
+  const playAssistantAudioAndResume = async (audioRecord?: AudioRecord) => {
+    if (!isCallModeRef.current) return;
+
+    if (!audioRecord) {
+      setCallState('listening', '正在听用户说话');
+      return;
+    }
+
+    setCallState('playing_model_audio', '正在播放模型回复');
+    stopPlaybackAudio();
+
+    await new Promise<void>((resolve) => {
+      const audio = new Audio(buildAudioSource(audioRecord));
+      playbackAudioRef.current = audio;
+      audio.onended = () => resolve();
+      audio.onerror = () => resolve();
+      void audio.play().catch((error) => {
+        console.error('Failed to play assistant audio:', error);
+        resolve();
+      });
+    });
+
+    playbackAudioRef.current = null;
+    if (isCallModeRef.current) {
+      setCallState('listening', '正在听用户说话');
+    }
+  };
+
+  const submitAudioTurn = async (audioRecord: AudioRecord) => {
+    if (!conversation || !isCallModeRef.current) return;
+
+    let resolvedApiConfig: ApiConfig | null = apiConfig;
+    if (!resolvedApiConfig || resolvedApiConfig.id !== conversation.apiConfigId) {
+      resolvedApiConfig = (await getApiConfig(conversation.apiConfigId)) || null;
+    }
+    if (!resolvedApiConfig) {
+      setCallState('error', 'API configuration not found');
+      return;
+    }
+
+    let resolvedPreset: AssistantPreset | null = assistantPreset;
+    if (conversation.assistantPresetId) {
+      if (!resolvedPreset || resolvedPreset.id !== conversation.assistantPresetId) {
+        resolvedPreset = (await getAssistantPreset(conversation.assistantPresetId)) || null;
+      }
+    } else {
+      resolvedPreset = null;
+    }
+
+    const conversationId = conversation.id;
+    const baseMessages = messagesRef.current;
+    const userMessage: ChatMessage = {
+      id: generateId(),
+      role: 'user',
+      content: '',
+      audioRecords: [audioRecord],
+      timestamp: Date.now(),
+    };
+    const messagesWithUser = [...baseMessages, userMessage];
+    const pendingConversation: Conversation = {
+      ...conversation,
+      messages: messagesWithUser,
+      title: resolveTitle(messagesWithUser, 'Voice call'),
+      updatedAt: Date.now(),
+    };
+
+    messagesRef.current = messagesWithUser;
+    if (activeConversationIdRef.current === conversationId) {
+      setMessages(messagesWithUser);
+    }
+    await persistFinalConversation(pendingConversation, conversationId);
+
+    if (!isCallModeRef.current) return;
+
+    setCallState('waiting_for_model', '正在等待模型回复');
+    callAbortControllerRef.current = new AbortController();
+
+    const model = conversation.modelIdOverride
+      || resolvedPreset?.modelId
+      || resolvedApiConfig.models[0]
+      || 'gpt-3.5-turbo';
+
+    const request = buildAudioChatCompletionRequest({
+      model,
+      messages: baseMessages,
+      currentUserAudio: audioRecord,
+      systemPrompt: resolvedPreset?.systemPrompt,
+      parameters: normalizeModelParameters(resolvedPreset?.parameters),
+    });
+
+    try {
+      const response = await sendAudioChatCompletion(
+        resolvedApiConfig.baseUrl,
+        resolvedApiConfig.apiKey,
+        request,
+        {
+          signal: callAbortControllerRef.current.signal,
+          useVercelServerProxy: resolvedPreset?.useVercelServerProxy === true,
+        }
+      );
+
+      const assistantMessage: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: response.content,
+        audioRecords: response.audio ? [response.audio] : undefined,
+        rawResponse: response.rawResponse,
+        usage: response.usage,
+        timestamp: Date.now(),
+      };
+      const finalMessages = [...messagesWithUser, assistantMessage];
+      messagesRef.current = finalMessages;
+      if (activeConversationIdRef.current === conversationId) {
+        setMessages(finalMessages);
+      }
+
+      await persistFinalConversation({
+        ...conversation,
+        messages: finalMessages,
+        title: resolveTitle(finalMessages, 'Voice call'),
+        updatedAt: Date.now(),
+      }, conversationId);
+
+      await playAssistantAudioAndResume(response.audio);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+
+      const normalizedError = error instanceof Error ? error : new Error('Unknown audio request error');
+      console.error('Audio call error:', normalizedError);
+      setCallState('error', normalizedError.message);
+    } finally {
+      callAbortControllerRef.current = null;
+    }
+  };
+
+  const startRecordingSegment = () => {
+    const stream = mediaStreamRef.current;
+    if (!stream || callStatusRef.current !== 'listening') return;
+
+    recordedChunksRef.current = [];
+    recordingStartedAtRef.current = Date.now();
+    silenceStartedAtRef.current = null;
+
+    const mimeType = MediaRecorder.isTypeSupported('audio/wav')
+      ? 'audio/wav'
+      : (MediaRecorder.isTypeSupported('audio/mpeg') ? 'audio/mpeg' : '');
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    mediaRecorderRef.current = recorder;
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunksRef.current.push(event.data);
+      }
+    };
+    recorder.onstop = () => {
+      const chunks = recordedChunksRef.current;
+      recordedChunksRef.current = [];
+      const startedAt = recordingStartedAtRef.current ?? Date.now();
+      recordingStartedAtRef.current = null;
+      silenceStartedAtRef.current = null;
+
+      if (!isCallModeRef.current || chunks.length === 0) {
+        return;
+      }
+
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/wav' });
+      if (blob.size === 0) {
+        setCallState('listening', '正在听用户说话');
+        return;
+      }
+
+      void createUserAudioRecord(blob, Date.now() - startedAt)
+        .then((record) => submitAudioTurn(record))
+        .catch((error) => {
+          console.error('Failed to create user audio record:', error);
+          setCallState('error', '录音保存失败');
+        });
+    };
+
+    recorder.start();
+    setCallState('recording', '正在录制用户语音');
+  };
+
+  const finishRecordingSegment = () => {
+    if (callStatusRef.current !== 'recording') return;
+    setCallState('waiting_for_model', '正在等待模型回复');
+    stopRecorder();
+  };
+
+  const readAudioLevel = () => {
+    const analyser = analyserRef.current;
+    if (!analyser || !isCallModeRef.current) return;
+
+    const samples = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(samples);
+    let sum = 0;
+    for (const sample of samples) {
+      const centered = (sample - 128) / 128;
+      sum += centered * centered;
+    }
+    const rms = Math.sqrt(sum / samples.length);
+
+    if (callStatusRef.current === 'listening' && rms >= SPEECH_LEVEL_THRESHOLD) {
+      startRecordingSegment();
+      return;
+    }
+
+    if (callStatusRef.current !== 'recording') {
+      return;
+    }
+
+    if (rms >= SPEECH_LEVEL_THRESHOLD) {
+      silenceStartedAtRef.current = null;
+      return;
+    }
+
+    if (silenceStartedAtRef.current === null) {
+      silenceStartedAtRef.current = Date.now();
+      return;
+    }
+
+    if (Date.now() - silenceStartedAtRef.current >= SILENCE_SUBMIT_MS) {
+      finishRecordingSegment();
+    }
+  };
+
+  const startCallMode = async () => {
+    if (isCallModeRef.current || !conversation || isLoading) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioWindow = window as AudioContextWindow;
+      const AudioContextClass = audioWindow.AudioContext || audioWindow.webkitAudioContext;
+      if (!AudioContextClass) {
+        throw new Error('AudioContext is not available');
+      }
+      const audioContext = new AudioContextClass();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+
+      mediaStreamRef.current = stream;
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
+      setIsCallMode(true);
+      setCallState('listening', '正在听用户说话');
+      audioLevelTimerRef.current = window.setInterval(readAudioLevel, AUDIO_LEVEL_INTERVAL_MS);
+    } catch (error) {
+      console.error('Failed to start call mode:', error);
+      setIsCallMode(true);
+      setCallState('error', '无法访问麦克风，请检查浏览器权限');
+    }
+  };
+
+  const stopCallMode = () => {
+    releaseCallResources();
+    setIsCallMode(false);
+    setCallState('idle', '');
+  };
+
   const stopStreaming = (reason: 'stopped' | 'error' = 'stopped', streamError?: string) => {
     abortControllerRef.current?.abort();
     clearPersistQueue();
@@ -411,6 +730,194 @@ export default function ChatInterface({
     }
   };
 
+  const setCallState = (status: CallStatus, message = '') => {
+    callStatusRef.current = status;
+    setCallStatus(status);
+    setCallStatusMessage(message);
+  };
+
+  const stopAudioLevelTimer = () => {
+    if (audioLevelTimerRef.current !== null) {
+      window.clearInterval(audioLevelTimerRef.current);
+      audioLevelTimerRef.current = null;
+    }
+  };
+
+  const stopPlaybackAudio = () => {
+    if (playbackAudioRef.current) {
+      playbackAudioRef.current.pause();
+      playbackAudioRef.current = null;
+    }
+  };
+
+  const stopRecorder = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+    mediaRecorderRef.current = null;
+  };
+
+  const releaseCallResources = () => {
+    stopAudioLevelTimer();
+    stopPlaybackAudio();
+    callAbortControllerRef.current?.abort();
+    callAbortControllerRef.current = null;
+
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+    mediaRecorderRef.current = null;
+
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+
+    void audioContextRef.current?.close().catch(() => {});
+    audioContextRef.current = null;
+    analyserRef.current = null;
+    recordedChunksRef.current = [];
+    recordingStartedAtRef.current = null;
+    silenceStartedAtRef.current = null;
+  };
+
+  useEffect(() => {
+    releaseCallResourcesRef.current = releaseCallResources;
+  });
+
+  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte);
+    }
+    return window.btoa(binary);
+  };
+
+  const writeString = (view: DataView, offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+  };
+
+  const base64ToBytes = (data: string): Uint8Array => {
+    const raw = window.atob(data.includes(',') ? data.split(',')[1] : data);
+    const bytes = new Uint8Array(raw.length);
+    for (let index = 0; index < raw.length; index += 1) {
+      bytes[index] = raw.charCodeAt(index);
+    }
+    return bytes;
+  };
+
+  const wrapPcm16AsWavBuffer = (data: string, sampleRate = 24000): ArrayBuffer => {
+    const pcmBytes = base64ToBytes(data);
+    const buffer = new ArrayBuffer(44 + pcmBytes.byteLength);
+    const view = new DataView(buffer);
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + pcmBytes.byteLength, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, pcmBytes.byteLength, true);
+    new Uint8Array(buffer, 44).set(pcmBytes);
+    return buffer;
+  };
+
+  const encodeAudioBufferToWav = (audioBuffer: AudioBuffer): ArrayBuffer => {
+    const channelCount = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const bytesPerSample = 2;
+    const frameCount = audioBuffer.length;
+    const dataSize = frameCount * channelCount * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, channelCount, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * channelCount * bytesPerSample, true);
+    view.setUint16(32, channelCount * bytesPerSample, true);
+    view.setUint16(34, 16, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    let offset = 44;
+    for (let frame = 0; frame < frameCount; frame += 1) {
+      for (let channel = 0; channel < channelCount; channel += 1) {
+        const sample = Math.max(-1, Math.min(1, audioBuffer.getChannelData(channel)[frame]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        offset += bytesPerSample;
+      }
+    }
+
+    return buffer;
+  };
+
+  const blobToBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      resolve(result.includes(',') ? result.split(',')[1] : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Failed to read audio blob'));
+    reader.readAsDataURL(blob);
+  });
+
+  const resolveAudioFormat = (mimeType: string): AudioRecord['format'] => (
+    mimeType.includes('mpeg') || mimeType.includes('mp3') ? 'mp3' : 'wav'
+  );
+
+  const buildAudioSource = (audioRecord: AudioRecord) => (
+    audioRecord.format === 'pcm16'
+      ? `data:audio/wav;base64,${arrayBufferToBase64(wrapPcm16AsWavBuffer(audioRecord.data))}`
+      : (audioRecord.data.startsWith('data:')
+      ? audioRecord.data
+      : `data:${audioRecord.mimeType};base64,${audioRecord.data}`)
+  );
+
+  const createUserAudioRecord = async (
+    blob: Blob,
+    durationMs: number
+  ): Promise<AudioRecord> => {
+    let data: string;
+    let mimeType = blob.type || 'audio/wav';
+    let format = resolveAudioFormat(mimeType);
+
+    if (format === 'wav' && !mimeType.includes('wav')) {
+      const decodeContext = new AudioContext();
+      const audioBuffer = await decodeContext.decodeAudioData(await blob.arrayBuffer());
+      const wavBuffer = encodeAudioBufferToWav(audioBuffer);
+      await decodeContext.close();
+      data = arrayBufferToBase64(wavBuffer);
+      mimeType = 'audio/wav';
+      format = 'wav';
+    } else {
+      data = await blobToBase64(blob);
+    }
+
+    return {
+      id: generateId(),
+      role: 'user',
+      mimeType,
+      format,
+      data,
+      durationMs,
+      createdAt: Date.now(),
+    };
+  };
+
   useEffect(() => {
     const flushForBackground = () => {
       if (!isStreamingRef.current) {
@@ -434,6 +941,10 @@ export default function ChatInterface({
       window.removeEventListener('pagehide', flushForBackground);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
+  }, []);
+
+  useEffect(() => () => {
+    releaseCallResourcesRef.current();
   }, []);
 
   const resolveTitle = (baseMessages: ChatMessage[], titleSeed?: string) => {
@@ -970,6 +1481,35 @@ export default function ChatInterface({
 
       <div className="flex-shrink-0 border-t border-slate-200/70 bg-slate-50/95 backdrop-blur-sm px-3 sm:px-4 py-3 shadow-lg">
         <div className="w-full">
+          {isCallMode && (
+            <div className={`mb-3 rounded-lg border px-3 py-2 ${
+              callStatus === 'error'
+                ? 'border-red-200 bg-red-50 text-red-800'
+                : 'border-blue-200 bg-blue-50 text-blue-900'
+            }`}>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className={`call-status-pulse call-status-pulse-${callStatus}`} />
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">{callStatusLabel}</div>
+                    {callStatusHint && callStatusHint !== callStatusLabel && (
+                      <div className="truncate text-xs opacity-80">{callStatusHint}</div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={stopCallMode}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-red-200 bg-white px-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+                  title="退出语音通话"
+                >
+                  <PhoneOff className="h-4 w-4" />
+                  退出通话
+                </button>
+              </div>
+            </div>
+          )}
+
           {draftImages.length > 0 && (
             <div className="mb-4">
               <div className="mb-2 text-xs font-medium text-slate-500">
@@ -1007,7 +1547,7 @@ export default function ChatInterface({
 
           <form
             onSubmit={handleSubmit}
-            className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3"
+            className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3"
           >
             <input
               type="file"
@@ -1068,12 +1608,27 @@ export default function ChatInterface({
             ) : (
               <button
                 type="submit"
-                disabled={!input.trim()}
+                disabled={!input.trim() || isCallMode}
                 className="flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-lg bg-blue-600 text-white transition-all duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Send className="w-4 h-4" />
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={isCallMode ? stopCallMode : startCallMode}
+              disabled={isLoading}
+              className={`flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-lg transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
+                isCallMode
+                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+              title={isCallMode ? '退出语音通话' : '开始语音通话'}
+              aria-label={isCallMode ? '退出语音通话' : '开始语音通话'}
+            >
+              {isCallMode ? <PhoneOff className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
+            </button>
           </form>
         </div>
       </div>

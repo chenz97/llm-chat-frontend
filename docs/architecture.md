@@ -34,7 +34,7 @@ The page composes four major UI areas:
 
 - `components/ConversationSidebar.tsx`: loads saved conversations, supports keyword search, and handles deletion and selection.
 - `components/ConversationConfigSelector.tsx`: surfaces current API config, preset, and model selection, filters the preset selector by preset visibility, and refreshes itself when settings change.
-- `components/ChatInterface.tsx`: owns message rendering, composer state, multi-image draft handling, streaming lifecycle, throttled persistence, interruption finalization, editing, regeneration, and stop-generation behavior.
+- `components/ChatInterface.tsx`: owns message rendering, composer state, multi-image draft handling, streaming lifecycle, voice-call recording/playback lifecycle, throttled persistence, interruption finalization, editing, regeneration, and stop-generation behavior.
 - `components/SettingsModal.tsx`: tab container for settings management.
 
 ## Settings Subsystem
@@ -102,6 +102,15 @@ Flow for a normal message:
 5. `lib/api.ts` parses SSE `data:` lines, extracts assistant content, best-effort reasoning text, reasoning details, token usage, provider metadata, and Responses `response.id`, then feeds incremental callbacks back into `ChatInterface`. `ChatInterface` merges repeated reasoning-detail chunks into stable blocks, and later chat-completions requests normalize saved reasoning metadata again before replaying only assistant turns that completed normally and still carry the required signatures.
 6. `ChatInterface` updates in-memory messages, throttles partial conversation persistence, flushes pending persistence when the page is backgrounded, and performs a final full save when streaming completes, is stopped, or fails mid-stream.
 
+Flow for a voice-call turn:
+
+1. `ChatInterface` enters call mode from the composer, requests microphone access, creates a Web Audio analyser, and shows the current call state.
+2. While the call state is listening, the analyser checks volume periodically. A speech-like level starts `MediaRecorder`; 3 seconds below the threshold stops recording and submits the segment.
+3. Browser-recorded audio is normalized into a WAV base64 `AudioRecord` before it is saved or sent upstream, because Chat Completions `input_audio` supports `wav` and `mp3` rather than every browser recording container.
+4. `lib/audioChat.ts` builds a streaming Chat Completions request with `modalities: ["text", "audio"]`, default PCM16 audio output settings, preset Model Parameter overrides, the preset system prompt, text history, full available user audio history, prior assistant audio IDs when present, and the current user audio.
+5. The optional proxy route forwards this streaming audio request through the same route used by text streaming, while `lib/audioChat.ts` parses audio-specific SSE chunks.
+6. The returned assistant text and audio are saved as a normal assistant message with audio records. The browser plays the assistant audio, then returns to listening if call mode is still active.
+
 `app/api/chat/completions/route.ts` is intentionally narrow. It validates `baseUrl`, `apiKey`, and `request`, reads the preset-selected request API mode, resolves either the upstream `/chat/completions` or `/responses` endpoint, forwards the request server-side, and streams the upstream body back to the browser.
 
 ## Rendering Pipeline
@@ -109,6 +118,7 @@ Flow for a normal message:
 Assistant messages are rendered through:
 
 - `components/Message.tsx`: message shell, copy/edit/regenerate controls, usage display, raw-response access, and single or multi-image preview handling.
+- `components/Message.tsx`: message shell, copy/edit/regenerate controls, usage display, raw-response access, audio replay controls, and single or multi-image preview handling.
 - `components/MarkdownRenderer.tsx`: markdown, math, syntax highlighting, and custom link/code rendering.
 - `components/RawResponseModal.tsx`: modal for inspecting captured raw SSE lines.
 - `components/ImageLightbox.tsx`: zoom and rotate controls for uploaded images.

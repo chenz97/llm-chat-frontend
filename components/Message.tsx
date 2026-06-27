@@ -5,7 +5,21 @@ import { ChatMessage } from '@/types';
 import { getMessageImageUrls } from '@/lib/imageUtils';
 import MarkdownRenderer from './MarkdownRenderer';
 import ImageLightbox from './ImageLightbox';
-import { User, Bot, Copy, Check, Pencil, X, Save, RotateCw, Maximize2, FileText } from 'lucide-react';
+import {
+  User,
+  Bot,
+  Copy,
+  Check,
+  Pencil,
+  X,
+  Save,
+  RotateCw,
+  Maximize2,
+  FileText,
+  Play,
+  Pause,
+  Volume2,
+} from 'lucide-react';
 import Image from 'next/image';
 import RawResponseModal from './RawResponseModal';
 
@@ -22,8 +36,10 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
   const [copied, setCopied] = useState(false);
   const [lightboxImageSrc, setLightboxImageSrc] = useState<string | null>(null);
   const [isRawOpen, setIsRawOpen] = useState(false);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const reasoningContainerRef = useRef<HTMLDivElement>(null);
   const shouldStickReasoningScrollRef = useRef(true);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
@@ -42,6 +58,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
     : undefined;
   const canShowRawResponse = !isUser && !isSystem && !!message.rawResponse;
   const messageImageUrls = getMessageImageUrls(message);
+  const audioRecords = message.audioRecords ?? [];
   const streamNotice = !isUser && !isSystem
     ? (
       message.streamState === 'error'
@@ -140,6 +157,89 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
     }
     setIsEditing(false);
   };
+
+  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte);
+    }
+    return window.btoa(binary);
+  };
+
+  const writeString = (view: DataView, offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+  };
+
+  const base64ToBytes = (data: string): Uint8Array => {
+    const raw = window.atob(data.includes(',') ? data.split(',')[1] : data);
+    const bytes = new Uint8Array(raw.length);
+    for (let index = 0; index < raw.length; index += 1) {
+      bytes[index] = raw.charCodeAt(index);
+    }
+    return bytes;
+  };
+
+  const wrapPcm16AsWav = (data: string, sampleRate = 24000): string => {
+    const pcmBytes = base64ToBytes(data);
+    const buffer = new ArrayBuffer(44 + pcmBytes.byteLength);
+    const view = new DataView(buffer);
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + pcmBytes.byteLength, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, pcmBytes.byteLength, true);
+    new Uint8Array(buffer, 44).set(pcmBytes);
+    return `data:audio/wav;base64,${arrayBufferToBase64(buffer)}`;
+  };
+
+  const buildAudioSource = (data: string, mimeType: string, format?: string) => {
+    if (format === 'pcm16') {
+      return wrapPcm16AsWav(data);
+    }
+    return (
+    data.startsWith('data:') ? data : `data:${mimeType};base64,${data}`
+    );
+  };
+
+  const handleToggleAudio = (
+    audioId: string,
+    data: string,
+    mimeType: string,
+    format?: string
+  ) => {
+    const currentAudio = audioElementRef.current;
+    if (playingAudioId === audioId && currentAudio) {
+      currentAudio.pause();
+      setPlayingAudioId(null);
+      return;
+    }
+
+    currentAudio?.pause();
+    const audio = new Audio(buildAudioSource(data, mimeType, format));
+    audioElementRef.current = audio;
+    setPlayingAudioId(audioId);
+    audio.onended = () => setPlayingAudioId(null);
+    audio.onerror = () => setPlayingAudioId(null);
+    void audio.play().catch((error) => {
+      console.error('Failed to play audio record:', error);
+      setPlayingAudioId(null);
+    });
+  };
+
+  useEffect(() => () => {
+    audioElementRef.current?.pause();
+  }, []);
 
   if (isSystem) {
     return (
@@ -264,6 +364,48 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
                 isOpen={lightboxImageSrc !== null}
                 onClose={() => setLightboxImageSrc(null)}
               />
+            )}
+
+            {audioRecords.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {audioRecords.map((audioRecord, index) => {
+                  const isPlaying = playingAudioId === audioRecord.id;
+                  const durationSeconds = audioRecord.durationMs
+                    ? Math.max(1, Math.round(audioRecord.durationMs / 1000))
+                    : null;
+                  return (
+                    <div
+                      key={audioRecord.id}
+                      className="flex max-w-md items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAudio(
+                          audioRecord.id,
+                          audioRecord.data,
+                          audioRecord.mimeType,
+                          audioRecord.format
+                        )}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white transition-colors hover:bg-blue-700"
+                        title={isPlaying ? '暂停音频' : '播放音频'}
+                        aria-label={isPlaying ? '暂停音频' : '播放音频'}
+                      >
+                        {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                      </button>
+                      <Volume2 className="h-4 w-4 shrink-0 text-slate-500" />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-slate-800">
+                          {audioRecord.role === 'user' ? '用户语音' : '模型语音'} {index + 1}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {audioRecord.format.toUpperCase()}
+                          {durationSeconds ? ` | ${durationSeconds}s` : ''}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
 
             <div className="text-slate-800 leading-relaxed text-base">

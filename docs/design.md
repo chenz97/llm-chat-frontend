@@ -9,7 +9,8 @@ Stable persisted entities:
 - `ApiConfig`: provider definition with `id`, `name`, `baseUrl`, `apiKey`, `models`, and `createdAt`.
 - `AssistantPreset`: reusable assistant definition with optional `apiConfigId`, fixed `modelId`, `systemPrompt`, arbitrary `parameters`, optional `requestApi`, optional `useVercelServerProxy`, optional `isVisible`, and `createdAt`.
 - `Conversation`: a persisted chat thread with `apiConfigId`, optional `assistantPresetId`, optional `modelIdOverride`, message list, and timestamps.
-- `ChatMessage`: individual message record with `role`, `content`, optional `imageUrls`, legacy optional `imageUrl`, optional reasoning fields, optional Responses `responseId`, optional usage, optional raw response, and timestamps.
+- `ChatMessage`: individual message record with `role`, `content`, optional `audioRecords`, optional `imageUrls`, legacy optional `imageUrl`, optional reasoning fields, optional Responses `responseId`, optional usage, optional raw response, and timestamps.
+- `AudioRecord`: saved audio payload with role, MIME type, OpenAI-supported format, base64 data, optional duration, optional provider audio ID, and creation time.
 - `SettingsExport`: portable JSON envelope for settings backup and restore.
 - `SettingsSyncConfig`: local-only GitHub Gist sync preference containing the browser-stored token, Gist ID, and target filename.
 
@@ -66,6 +67,10 @@ Request resolution rules:
 
 User images are represented as OpenAI-style `content` arrays that contain one text item followed by one `image_url` item per attached image. Stored user messages now prefer `imageUrls` for multi-image turns while still reading legacy single-image `imageUrl` values from older conversations.
 
+Voice-call requests use `lib/audioChat.ts` rather than the text SSE parser. The helper creates streaming Chat Completions requests with `modalities: ["text", "audio"]` and `audio: { voice: "alloy", format: "pcm16" }` by default. Existing preset Model Parameters are merged after parsing JSON-like string values, so `audio.voice`, `audio.format`, `modalities`, and other request fields can be overridden without a new settings surface.
+
+Voice-call history intentionally sends all available audio context in v1. User audio is replayed as `input_audio` content parts. Assistant audio is replayed through the provider audio ID returned by the upstream response when available, while the full audio data remains stored locally for UI playback. Browser recordings are converted to WAV before upload so the request does not depend on the browser's native recording container.
+
 ## Streaming And Persistence Design
 
 `lib/api.ts` parses server-sent events line by line instead of relying on a provider SDK. This keeps the frontend provider-agnostic and allows the app to retain raw event lines for debugging.
@@ -107,6 +112,7 @@ The route validates that the first two values are non-empty strings and that `re
 Important design limitation:
 
 - the proxy is a transport convenience layer, not a secrets boundary. The browser still supplies the API key at request time.
+- both text streaming and audio-call requests use `stream: true`; audio calls parse audio-specific SSE chunks instead of the text streaming callbacks.
 
 ## Settings Transfer Contract
 
