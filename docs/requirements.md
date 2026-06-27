@@ -21,8 +21,8 @@ The application currently supports local-first text and image conversations thro
 - Each user audio turn must be saved in the conversation history and rendered with a replay control.
 - Each assistant audio reply returned by the model must be saved in the conversation history and rendered with a replay control.
 - Every voice-mode request must use the current conversation's selected API configuration, model override, assistant preset, system prompt, and Model Parameters.
-- Model Parameters must be able to override audio settings such as `audio.voice` and `audio.format`.
-- The default audio output settings are `audio.voice = "cedar"` and `audio.format = "pcm16"` when no preset parameter overrides them.
+- Model Parameters must be able to provide provider-specific audio settings such as `audio.voice` and `audio.format`.
+- Voice mode must not inject provider-specific default `audio.voice` or `audio.format` values. If a provider requires these settings, the user must configure them in the assistant preset Model Parameters.
 - Text input to audio models must request audio output as well as text output so providers that reject pure text-only calls remain usable.
 - The app must attempt the current model/preset directly; unsupported model or provider errors must be shown in call state instead of silently changing models.
 - Voice mode must send enough conversation history for continuity:

@@ -56,13 +56,8 @@ function cloneParameters(parameters?: ModelParameters): Record<string, unknown> 
   return { ...parameters };
 }
 
-function resolveAudioRequestConfig(parameters: Record<string, unknown>): Record<string, unknown> {
-  const audio = isRecord(parameters.audio) ? parameters.audio : {};
-  return {
-    voice: typeof audio.voice === 'string' && audio.voice.trim() ? audio.voice : 'cedar',
-    format: typeof audio.format === 'string' && audio.format.trim() ? audio.format : DEFAULT_OUTPUT_AUDIO_FORMAT,
-    ...audio,
-  };
+function resolveAudioRequestConfig(parameters: Record<string, unknown>): Record<string, unknown> | undefined {
+  return isRecord(parameters.audio) ? parameters.audio : undefined;
 }
 
 function resolveModalities(parameters: Record<string, unknown>): unknown {
@@ -168,7 +163,7 @@ export function buildAudioChatCompletionRequest({
     model,
     messages: apiMessages,
     modalities,
-    audio,
+    ...(audio ? { audio } : {}),
     ...requestParameters,
   };
 }
@@ -201,7 +196,7 @@ export function buildTextAudioChatCompletionRequest({
     model,
     messages: apiMessages,
     modalities,
-    audio,
+    ...(audio ? { audio } : {}),
     ...requestParameters,
   };
 }

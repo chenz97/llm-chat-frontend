@@ -87,6 +87,45 @@ Voice-call mode differs from non-voice text mode because it sends microphone aud
 - `npm run lint`: passed with 0 errors and the pre-existing `components/ImageLightbox.tsx` `<img>` warning.
 - Manual browser verification with a real DashScope API key and microphone remains recommended: select `qwen3.5-omni-flash`, enter voice-call mode, speak one short utterance, and confirm the provider no longer returns the invalid URL error.
 
+## Follow-Up: Explicit Audio Output Parameters
+
+### Status
+
+Completed on 2026-06-27.
+
+### Verification Contract
+
+End-to-end goal: voice-call and text-to-audio requests must no longer inject OpenAI-specific audio defaults that can be invalid for other OpenAI-compatible providers such as DashScope Qwen-Omni. Users must be able to provide provider-specific output settings through assistant preset Model Parameters.
+
+Correctness oracle:
+
+- When no preset `audio` parameter is configured, audio Chat Completions requests still include `modalities: ["text", "audio"]` but omit the top-level `audio` field.
+- When preset `audio` is configured, the request includes that object unchanged after existing JSON-like string parsing.
+- Qwen Omni local audio input compatibility from the previous follow-up still applies.
+- Response playback still uses the local parser's fallback output format when the request omits `audio.format`.
+
+Likely failure modes ruled out:
+
+- Qwen rejects the request with `Voice 'cedar' is not supported`.
+- OpenAI-compatible providers receive an unintended provider-specific voice or format.
+- Explicitly configured `audio.voice` / `audio.format` values stop being passed through.
+
+### Root Cause
+
+`lib/audioChat.ts` previously filled missing audio output settings with `audio.voice = "cedar"` and `audio.format = "pcm16"`. That worked only for providers accepting those exact values. DashScope Qwen-Omni expects its own `voice` names and reports an invalid-voice error when `cedar` is sent.
+
+### Implementation Notes
+
+- `resolveAudioRequestConfig` now returns an audio config only when `parameters.audio` is an object.
+- `buildAudioChatCompletionRequest` and `buildTextAudioChatCompletionRequest` omit the `audio` field when it is not explicitly configured.
+- Existing `normalizeModelParameters` in `ChatInterface` still parses JSON-like custom parameter strings before request construction, so a custom parameter named `audio` with a JSON object value remains the settings path for provider-specific voice and format.
+- `docs/requirements.md` and `docs/design.md` were updated to remove the old default-voice requirement and document explicit provider-specific audio parameters.
+
+### Validation Log
+
+- RED check: `npm test -- lib/audioChat.test.mjs` failed after changing the test to require no implicit `audio` field when no audio parameters are configured.
+- GREEN check: `npm test -- lib/audioChat.test.mjs` passed after removing default `audio` injection; 6 test files passed under the existing script.
+
 ## Follow-Up: Browser VAD Segment Extraction
 
 ### Status
