@@ -126,6 +126,50 @@ Likely failure modes ruled out:
 - RED check: `npm test -- lib/audioChat.test.mjs` failed after changing the test to require no implicit `audio` field when no audio parameters are configured.
 - GREEN check: `npm test -- lib/audioChat.test.mjs` passed after removing default `audio` injection; 6 test files passed under the existing script.
 
+## Follow-Up: Qwen Omni Output Audio Playback
+
+### Status
+
+Completed on 2026-06-27.
+
+### Verification Contract
+
+End-to-end goal: Qwen Omni audio responses that are returned successfully through the streaming Chat Completions path must be saved in a locally playable form, and voice-call request errors must stop microphone/listening resources instead of leaving call mode active.
+
+Correctness oracle:
+
+- If a provider declares/requested `audio.format = "wav"` but the returned `audio.data` does not contain a RIFF/WAVE header, the app must treat the payload as raw PCM16 and use the existing PCM-to-WAV playback wrapper.
+- If returned `audio.data` already contains a RIFF/WAVE header, the app must preserve it as `wav`.
+- `mp3` and explicit `pcm16` response handling must keep their previous behavior.
+- On voice-mode API, microphone, VAD-resume, or audio-record creation errors, the app must release call resources and clear `isCallMode`, while preserving the error state/message for user feedback.
+
+Likely failure modes ruled out:
+
+- Browser receives raw PCM bytes as `audio/wav` and fails to decode/play them.
+- True WAV outputs are mistakenly double-wrapped as PCM.
+- Voice mode remains listening or holding microphone resources after an error.
+
+### Root Cause
+
+Live verification with `.env.qwen` showed Qwen Omni returns valid SSE chunks with `audio.data`, but the decoded bytes do not start with the WAV `RIFF...WAVE` header even when the request uses `audio.format = "wav"`. The previous parser trusted the requested output format and stored the payload as `format: "wav"` / `mimeType: "audio/wav"`, so browser playback tried to decode raw PCM bytes as a WAV container.
+
+### Implementation Notes
+
+- `lib/audioChat.ts` now inspects the first decoded bytes of returned `audio.data` when the requested output format is `wav`.
+- Headerless `wav` output is normalized to `format: "pcm16"` / `mimeType: "audio/pcm"` so existing playback code wraps it in a WAV container.
+- RIFF/WAVE payloads remain `format: "wav"` / `mimeType: "audio/wav"`.
+- `components/ChatInterface.tsx` adds a voice-error shutdown path that releases VAD, recorder, microphone tracks, playback, and in-flight request state, then clears call mode while retaining the error status strip.
+
+### Validation Log
+
+- Live Qwen probe using `.env.qwen`: status 200, SSE response contained text and audio; decoded audio header was all zero bytes rather than `RIFF...WAVE`, confirming raw PCM payload.
+- RED check: `npm test -- lib/audioChat.test.mjs` failed after adding tests requiring headerless `wav` output to become `pcm16`.
+- GREEN check: `npm test -- lib/audioChat.test.mjs` passed after adding response payload header detection.
+- Live Qwen parser verification using `.env.qwen`: status 200; `readAudioChatCompletionStream(response, "wav")` produced `audioFormat pcm16`, `mimeType audio/pcm`, and non-empty audio data.
+- `npm test`: passed; 6 test files, 6 passed.
+- `npm run build`: passed; Next.js compiled, type-checked, generated 5 static pages, and preserved `/api/chat/completions` as dynamic.
+- `npm run lint`: passed with 0 errors and the pre-existing `components/ImageLightbox.tsx` `<img>` warning.
+
 ## Follow-Up: Browser VAD Segment Extraction
 
 ### Status

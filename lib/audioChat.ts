@@ -51,6 +51,67 @@ function coerceNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function getBase64Payload(data: string): string {
+  const commaIndex = data.indexOf(',');
+  return commaIndex >= 0 ? data.slice(commaIndex + 1) : data;
+}
+
+function decodeBase64Prefix(data: string, byteCount: number): Uint8Array {
+  const payload = getBase64Payload(data).replace(/\s/g, '');
+  const charCount = Math.ceil(byteCount / 3) * 4;
+  const prefix = payload.slice(0, charCount);
+
+  if (!prefix) {
+    return new Uint8Array();
+  }
+
+  if (typeof Buffer !== 'undefined') {
+    return new Uint8Array(Buffer.from(prefix, 'base64').subarray(0, byteCount));
+  }
+
+  const binary = atob(prefix);
+  const bytes = new Uint8Array(Math.min(byteCount, binary.length));
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function hasWavHeader(data: string): boolean {
+  const bytes = decodeBase64Prefix(data, 12);
+  if (bytes.length < 12) {
+    return false;
+  }
+
+  return (
+    bytes[0] === 0x52
+    && bytes[1] === 0x49
+    && bytes[2] === 0x46
+    && bytes[3] === 0x46
+    && bytes[8] === 0x57
+    && bytes[9] === 0x41
+    && bytes[10] === 0x56
+    && bytes[11] === 0x45
+  );
+}
+
+function resolveAudioRecordFormat(
+  outputFormat: AudioRecord['format'],
+  audioData: string
+): AudioRecord['format'] {
+  if (outputFormat === 'wav' && !hasWavHeader(audioData)) {
+    return 'pcm16';
+  }
+
+  return outputFormat;
+}
+
+function resolveAudioMimeType(format: AudioRecord['format']): string {
+  if (format === 'mp3') return 'audio/mpeg';
+  if (format === 'wav') return 'audio/wav';
+  return DEFAULT_OUTPUT_AUDIO_MIME_TYPE;
+}
+
 function cloneParameters(parameters?: ModelParameters): Record<string, unknown> {
   if (!parameters) return {};
   return { ...parameters };
@@ -238,6 +299,9 @@ export function extractAudioChatCompletionResponse(
   const audioData = asString(audio?.data);
   const providerAudioId = asString(audio?.id);
   const rawResponse = JSON.stringify(response, null, 2);
+  const audioRecordFormat = audioData
+    ? resolveAudioRecordFormat(outputFormat, audioData)
+    : outputFormat;
 
   return {
     content,
@@ -246,10 +310,8 @@ export function extractAudioChatCompletionResponse(
         audio: {
           id: `audio-${Date.now()}`,
           role: 'assistant',
-          mimeType: outputFormat === 'mp3'
-            ? 'audio/mpeg'
-            : (outputFormat === 'wav' ? 'audio/wav' : DEFAULT_OUTPUT_AUDIO_MIME_TYPE),
-          format: outputFormat,
+          mimeType: resolveAudioMimeType(audioRecordFormat),
+          format: audioRecordFormat,
           data: audioData,
           providerAudioId,
           createdAt: Date.now(),
@@ -428,6 +490,9 @@ export async function readAudioChatCompletionStream(
   }
 
   const content = state.content || state.audioTranscript;
+  const audioRecordFormat = state.audioData
+    ? resolveAudioRecordFormat(outputFormat, state.audioData)
+    : outputFormat;
   return {
     content,
     ...(state.audioData
@@ -435,10 +500,8 @@ export async function readAudioChatCompletionStream(
         audio: {
           id: `audio-${Date.now()}`,
           role: 'assistant',
-          mimeType: outputFormat === 'mp3'
-            ? 'audio/mpeg'
-            : (outputFormat === 'wav' ? 'audio/wav' : DEFAULT_OUTPUT_AUDIO_MIME_TYPE),
-          format: outputFormat,
+          mimeType: resolveAudioMimeType(audioRecordFormat),
+          format: audioRecordFormat,
           data: state.audioData,
           providerAudioId: state.providerAudioId,
           createdAt: Date.now(),

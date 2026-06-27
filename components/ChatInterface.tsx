@@ -476,7 +476,7 @@ export default function ChatInterface({
       return true;
     } catch (error) {
       console.error('Failed to resume VAD listening:', error);
-      setCallState('error', '语音检测恢复失败');
+      stopCallModeAfterError('语音检测恢复失败');
       return false;
     }
   };
@@ -525,7 +525,7 @@ export default function ChatInterface({
       resolvedApiConfig = (await getApiConfig(conversation.apiConfigId)) || null;
     }
     if (!resolvedApiConfig) {
-      setCallState('error', 'API configuration not found');
+      stopCallModeAfterError('API configuration not found');
       return;
     }
 
@@ -620,7 +620,7 @@ export default function ChatInterface({
 
       const normalizedError = error instanceof Error ? error : new Error('Unknown audio request error');
       console.error('Audio call error:', normalizedError);
-      setCallState('error', normalizedError.message);
+      stopCallModeAfterError(normalizedError.message);
     } finally {
       callAbortControllerRef.current = null;
     }
@@ -776,7 +776,7 @@ export default function ChatInterface({
         .then((record) => submitAudioTurn(record))
         .catch((error) => {
           console.error('Failed to create user audio record:', error);
-          setCallState('error', '录音保存失败');
+          stopCallModeAfterError('录音保存失败');
         });
     };
 
@@ -911,7 +911,7 @@ export default function ChatInterface({
           .then((record) => submitAudioTurn(record))
           .catch((error) => {
             console.error('Failed to create VAD user audio record:', error);
-            setCallState('error', '录音保存失败');
+            stopCallModeAfterError('录音保存失败');
           });
       },
       onVADMisfire: () => {
@@ -948,7 +948,7 @@ export default function ChatInterface({
         console.error('Failed to start call mode:', fallbackError);
         isCallModeRef.current = true;
         setIsCallMode(true);
-        setCallState('error', '无法访问麦克风，请检查浏览器权限');
+        stopCallModeAfterError('无法访问麦克风，请检查浏览器权限');
       }
     }
   };
@@ -1056,6 +1056,13 @@ export default function ChatInterface({
     recordingStartedAtRef.current = null;
     silenceStartedAtRef.current = null;
     recordingEffectiveDurationMsRef.current = null;
+  };
+
+  const stopCallModeAfterError = (message: string) => {
+    releaseCallResources();
+    isCallModeRef.current = false;
+    setIsCallMode(false);
+    setCallState('error', message);
   };
 
   useEffect(() => {
@@ -1757,7 +1764,7 @@ export default function ChatInterface({
 
       <div className="flex-shrink-0 border-t border-slate-200/70 bg-slate-50/95 backdrop-blur-sm px-3 sm:px-4 py-3 shadow-lg">
         <div className="w-full">
-          {isCallMode && (
+          {(isCallMode || callStatus === 'error') && (
             <div className={`mb-3 rounded-lg border px-3 py-2 ${
               callStatus === 'error'
                 ? 'border-red-200 bg-red-50 text-red-800'
