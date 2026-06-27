@@ -19,6 +19,13 @@ export interface BuildAudioChatCompletionRequestOptions {
   parameters?: ModelParameters;
 }
 
+export interface BuildTextAudioChatCompletionRequestOptions {
+  model: string;
+  messages: ChatMessage[];
+  systemPrompt?: string;
+  parameters?: ModelParameters;
+}
+
 export interface AudioChatCompletionResponse {
   content: string;
   audio?: AudioRecord;
@@ -52,7 +59,7 @@ function cloneParameters(parameters?: ModelParameters): Record<string, unknown> 
 function resolveAudioRequestConfig(parameters: Record<string, unknown>): Record<string, unknown> {
   const audio = isRecord(parameters.audio) ? parameters.audio : {};
   return {
-    voice: typeof audio.voice === 'string' && audio.voice.trim() ? audio.voice : 'alloy',
+    voice: typeof audio.voice === 'string' && audio.voice.trim() ? audio.voice : 'cedar',
     format: typeof audio.format === 'string' && audio.format.trim() ? audio.format : DEFAULT_OUTPUT_AUDIO_FORMAT,
     ...audio,
   };
@@ -105,23 +112,6 @@ function convertStoredMessage(message: ChatMessage): Message[] {
     return converted;
   }
 
-  if (message.role === 'assistant' && audioRecords.length > 0) {
-    const audioRecordWithId = audioRecords.find((record) => (
-      record.role === 'assistant'
-      && typeof record.providerAudioId === 'string'
-      && record.providerAudioId.trim().length > 0
-    ));
-
-    converted.push({
-      role: 'assistant',
-      content: message.content,
-      ...(audioRecordWithId?.providerAudioId
-        ? { audio: { id: audioRecordWithId.providerAudioId } }
-        : {}),
-    });
-    return converted;
-  }
-
   converted.push({
     role: message.role,
     content: message.content,
@@ -155,6 +145,39 @@ export function buildAudioChatCompletionRequest({
   }
 
   apiMessages.push(buildUserAudioMessage(currentUserAudio));
+
+  return {
+    model,
+    messages: apiMessages,
+    modalities,
+    audio,
+    ...requestParameters,
+  };
+}
+
+export function buildTextAudioChatCompletionRequest({
+  model,
+  messages,
+  systemPrompt,
+  parameters,
+}: BuildTextAudioChatCompletionRequestOptions): ChatCompletionRequest {
+  const requestParameters = cloneParameters(parameters);
+  const audio = resolveAudioRequestConfig(requestParameters);
+  const modalities = resolveModalities(requestParameters);
+  delete requestParameters.audio;
+  delete requestParameters.modalities;
+
+  const apiMessages: Message[] = [];
+  if (systemPrompt?.trim()) {
+    apiMessages.push({
+      role: 'system',
+      content: systemPrompt.trim(),
+    });
+  }
+
+  for (const message of messages) {
+    apiMessages.push(...convertStoredMessage(message));
+  }
 
   return {
     model,

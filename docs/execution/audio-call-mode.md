@@ -17,7 +17,7 @@ Correctness oracle:
 - UI state must match the actual call state: listening, recording, waiting for model, playing model reply, or error.
 - User speech must produce a persisted user message with an audio replay control.
 - The model response must produce a persisted assistant message with text when available and an audio replay control when audio is returned.
-- Voice requests must include current preset system prompt, current Model Parameters including `audio` overrides, full available user audio history, prior assistant audio IDs when still available, and the current user audio.
+- Voice requests must include current preset system prompt, current Model Parameters including `audio` overrides, prior user audio history, assistant text history, and the current user audio.
 - Exiting call mode must stop recording, playback, analyser timers, and microphone tracks.
 
 Likely failure modes to rule out:
@@ -33,7 +33,7 @@ Likely failure modes to rule out:
 ## Progress Notes
 
 - Baseline `npm test` passed before implementation: 3 files, 3 passed.
-- Official API reference confirms `input_audio` accepts base64 `wav` or `mp3`, audio output uses `modalities` plus `audio`, and prior assistant audio can be referenced by returned audio ID.
+- Official API reference confirms `input_audio` accepts base64 `wav` or `mp3`, and audio output uses `modalities` plus `audio`.
 - Added request/response helper tests for system prompts, full audio history, Model Parameter audio overrides, assistant audio extraction, usage extraction, and raw response capture.
 - First full `npm test` after helper implementation passed: 4 files, 4 passed.
 - `npm run build` initially failed on the Safari-prefixed `webkitAudioContext` type; root cause was the standard DOM `Window` type not declaring that property. The fix uses a narrow local `AudioContextWindow` type and keeps the runtime fallback.

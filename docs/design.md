@@ -67,9 +67,9 @@ Request resolution rules:
 
 User images are represented as OpenAI-style `content` arrays that contain one text item followed by one `image_url` item per attached image. Stored user messages now prefer `imageUrls` for multi-image turns while still reading legacy single-image `imageUrl` values from older conversations.
 
-Voice-call requests use `lib/audioChat.ts` rather than the text SSE parser. The helper creates streaming Chat Completions requests with `modalities: ["text", "audio"]` and `audio: { voice: "alloy", format: "pcm16" }` by default. Existing preset Model Parameters are merged after parsing JSON-like string values, so `audio.voice`, `audio.format`, `modalities`, and other request fields can be overridden without a new settings surface.
+Voice-call requests use `lib/audioChat.ts` rather than the text SSE parser. The helper creates streaming Chat Completions requests with `modalities: ["text", "audio"]` and `audio: { voice: "cedar", format: "pcm16" }` by default. Existing preset Model Parameters are merged after parsing JSON-like string values, so `audio.voice`, `audio.format`, `modalities`, and other request fields can be overridden without a new settings surface.
 
-Voice-call history intentionally sends all available audio context in v1. User audio is replayed as `input_audio` content parts. Assistant audio is replayed through the provider audio ID returned by the upstream response when available, while the full audio data remains stored locally for UI playback. Browser recordings are converted to WAV before upload so the request does not depend on the browser's native recording container.
+Voice-call history sends saved user audio as `input_audio` content parts and sends assistant replies as text history when returned text or transcript is available. Full assistant audio data remains stored locally for UI playback, but it is not replayed into later requests when text is available. Browser recordings are converted to WAV before upload so the request does not depend on the browser's native recording container.
 
 ## Streaming And Persistence Design
 

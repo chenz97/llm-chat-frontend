@@ -107,7 +107,7 @@ Flow for a voice-call turn:
 1. `ChatInterface` enters call mode from the composer, requests microphone access, creates a Web Audio analyser, and shows the current call state.
 2. While the call state is listening, the analyser checks volume periodically. A speech-like level starts `MediaRecorder`; 3 seconds below the threshold stops recording and submits the segment.
 3. Browser-recorded audio is normalized into a WAV base64 `AudioRecord` before it is saved or sent upstream, because Chat Completions `input_audio` supports `wav` and `mp3` rather than every browser recording container.
-4. `lib/audioChat.ts` builds a streaming Chat Completions request with `modalities: ["text", "audio"]`, default PCM16 audio output settings, preset Model Parameter overrides, the preset system prompt, text history, full available user audio history, prior assistant audio IDs when present, and the current user audio.
+4. `lib/audioChat.ts` builds a streaming Chat Completions request with `modalities: ["text", "audio"]`, default Cedar PCM16 audio output settings, preset Model Parameter overrides, the preset system prompt, text history, prior user audio history, and the current user audio.
 5. The optional proxy route forwards this streaming audio request through the same route used by text streaming, while `lib/audioChat.ts` parses audio-specific SSE chunks.
 6. The returned assistant text and audio are saved as a normal assistant message with audio records. The browser plays the assistant audio, then returns to listening if call mode is still active.
 

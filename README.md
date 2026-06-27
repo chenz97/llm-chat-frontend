@@ -133,9 +133,10 @@ Voice call mode uses the current conversation's API configuration, selected mode
 
 Notes:
 - Use a Chat Completions audio-capable model such as `gpt-audio-mini`.
-- The default output audio config is `audio.voice = "alloy"` and `audio.format = "pcm16"`.
-- Preset Model Parameters can override the audio config, for example `{ "audio": { "voice": "verse", "format": "mp3" } }`.
-- The app stores audio records locally and sends the full available audio history on later voice turns.
+- The default output audio config is `audio.voice = "cedar"` and `audio.format = "pcm16"`.
+- Preset Model Parameters can override the audio config, for example `{ "audio": { "voice": "verse", "format": "pcm16" } }`.
+- Text messages sent to audio-named models also request an audio reply, because some audio providers reject pure text-only requests for those models.
+- The app stores audio records locally, sends saved user audio on later voice turns, and sends assistant replies as text history when text is available.
 
 ### Image Support
 

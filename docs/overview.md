@@ -25,7 +25,7 @@ The codebase currently implements the following stable product scope:
 - Conversation storage, conversation search, current-conversation restoration, and draft conversation creation before first persistence.
 - Streaming chat responses with partial rendering, cancellation, final persistence, and recovery-friendly interruption handling that preserves already received assistant output across both chat-completions and responses request modes.
 - User image upload and paste support using base64 `image_url` message content, including multiple images in a single user turn.
-- Voice-call mode for Chat Completions audio models. The browser records user speech, auto-submits after 3 seconds of silence, sends full available audio history, plays returned assistant audio, and keeps every audio record replayable in the conversation.
+- Voice-call mode for Chat Completions audio models. The browser records user speech, auto-submits after 3 seconds of silence, sends prior user audio plus assistant text history, plays returned assistant audio, and keeps every audio record replayable in the conversation.
 - Markdown rendering with GitHub Flavored Markdown, KaTeX math, and syntax highlighting.
 - A server-side forwarding route at `/api/chat/completions` for deployments where browser-to-provider requests are undesirable.
 - JSON import/export for API configurations and assistant presets.

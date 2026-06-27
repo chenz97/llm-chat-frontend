@@ -17,7 +17,7 @@ The repository is currently in a local-first MVP hardening phase. The primary en
 - Settings import/export and a raw request debugging script.
 - Manual GitHub Gist settings sync from the Import/Export settings page.
 - URL deep-link prompt fill and autosend support for command-driven browser launch workflows.
-- Chat Completions audio call mode with microphone silence detection, visible call states, full audio-history requests, and per-message audio replay controls.
+- Chat Completions audio call mode with microphone silence detection, visible call states, prior user-audio context, assistant text context, and per-message audio replay controls.
 - Baseline project documentation under `docs/`.
 - README alignment with the current IndexedDB-first storage model, proxy behavior, and repository structure.
 

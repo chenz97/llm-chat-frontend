@@ -31,6 +31,7 @@ import {
 } from '@/lib/api';
 import {
   buildAudioChatCompletionRequest,
+  buildTextAudioChatCompletionRequest,
   sendAudioChatCompletion,
 } from '@/lib/audioChat';
 import { parseChatDeepLinkAction } from '@/lib/chatDeepLink';
@@ -76,6 +77,8 @@ type AudioContextWindow = Window & typeof globalThis & {
 const SILENCE_SUBMIT_MS = 3000;
 const AUDIO_LEVEL_INTERVAL_MS = 120;
 const SPEECH_LEVEL_THRESHOLD = 0.035;
+
+const isAudioModel = (model: string) => model.toLowerCase().includes('audio');
 
 const normalizeRequestParameters = (
   requestApi: RequestApi,
@@ -432,14 +435,16 @@ export default function ChatInterface({
   };
 
   const playAssistantAudioAndResume = async (audioRecord?: AudioRecord) => {
-    if (!isCallModeRef.current) return;
-
     if (!audioRecord) {
-      setCallState('listening', '正在听用户说话');
+      if (isCallModeRef.current) {
+        setCallState('listening', '正在听用户说话');
+      }
       return;
     }
 
-    setCallState('playing_model_audio', '正在播放模型回复');
+    if (isCallModeRef.current) {
+      setCallState('playing_model_audio', '正在播放模型回复');
+    }
     stopPlaybackAudio();
 
     await new Promise<void>((resolve) => {
@@ -565,6 +570,109 @@ export default function ChatInterface({
       setCallState('error', normalizedError.message);
     } finally {
       callAbortControllerRef.current = null;
+    }
+  };
+
+  const startTextAudioResponse = async (baseMessages: ChatMessage[], titleSeed?: string) => {
+    if (!conversation) return;
+
+    let resolvedApiConfig: ApiConfig | null = apiConfig;
+    if (!resolvedApiConfig || resolvedApiConfig.id !== conversation.apiConfigId) {
+      resolvedApiConfig = (await getApiConfig(conversation.apiConfigId)) || null;
+    }
+    if (!resolvedApiConfig) return;
+
+    let resolvedPreset: AssistantPreset | null = assistantPreset;
+    if (conversation.assistantPresetId) {
+      if (!resolvedPreset || resolvedPreset.id !== conversation.assistantPresetId) {
+        resolvedPreset = (await getAssistantPreset(conversation.assistantPresetId)) || null;
+      }
+    } else {
+      resolvedPreset = null;
+    }
+
+    const conversationId = conversation.id;
+    const model = conversation.modelIdOverride
+      || resolvedPreset?.modelId
+      || resolvedApiConfig.models[0]
+      || 'gpt-3.5-turbo';
+    const request = buildTextAudioChatCompletionRequest({
+      model,
+      messages: baseMessages,
+      systemPrompt: resolvedPreset?.systemPrompt,
+      parameters: normalizeModelParameters(resolvedPreset?.parameters),
+    });
+
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+    setIsLoading(true);
+
+    try {
+      const response = await sendAudioChatCompletion(
+        resolvedApiConfig.baseUrl,
+        resolvedApiConfig.apiKey,
+        request,
+        {
+          signal: abortControllerRef.current.signal,
+          useVercelServerProxy: resolvedPreset?.useVercelServerProxy === true,
+        }
+      );
+
+      const assistantMessage: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: response.content,
+        audioRecords: response.audio ? [response.audio] : undefined,
+        rawResponse: response.rawResponse,
+        usage: response.usage,
+        providerMetadata: response.provider ? { provider: response.provider } : undefined,
+        timestamp: Date.now(),
+      };
+      const finalMessages = [...baseMessages, assistantMessage];
+      messagesRef.current = finalMessages;
+      if (activeConversationIdRef.current === conversationId) {
+        setMessages(finalMessages);
+      }
+      await persistFinalConversation({
+        ...conversation,
+        messages: finalMessages,
+        title: resolveTitle(finalMessages, titleSeed),
+        updatedAt: Date.now(),
+      }, conversationId);
+
+      if (response.audio) {
+        await playAssistantAudioAndResume(response.audio);
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+
+      const normalizedError = error instanceof Error ? error : new Error('Unknown audio request error');
+      const assistantMessage: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: '',
+        streamState: 'error',
+        streamError: `请求发送失败。${normalizedError.message}`,
+        timestamp: Date.now(),
+      };
+      const finalMessages = [...baseMessages, assistantMessage];
+      messagesRef.current = finalMessages;
+      if (activeConversationIdRef.current === conversationId) {
+        setMessages(finalMessages);
+      }
+      await persistFinalConversation({
+        ...conversation,
+        messages: finalMessages,
+        title: resolveTitle(finalMessages, titleSeed),
+        updatedAt: Date.now(),
+      }, conversationId);
+    } finally {
+      abortControllerRef.current = null;
+      if (activeConversationIdRef.current === conversationId) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -1294,6 +1402,16 @@ export default function ChatInterface({
     setMessages(newMessages);
     setInput('');
     setDraftImages([]);
+
+    const model = conversation.modelIdOverride
+      || assistantPreset?.modelId
+      || apiConfig?.models[0]
+      || '';
+    if (isAudioModel(model) && draftImages.length === 0) {
+      await startTextAudioResponse(newMessages, trimmedInput);
+      return;
+    }
+
     await startAssistantResponse(newMessages, trimmedInput);
   };
 
@@ -1487,7 +1605,7 @@ export default function ChatInterface({
                 ? 'border-red-200 bg-red-50 text-red-800'
                 : 'border-blue-200 bg-blue-50 text-blue-900'
             }`}>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className={`call-status-pulse call-status-pulse-${callStatus}`} />
                   <div className="min-w-0">
@@ -1497,15 +1615,6 @@ export default function ChatInterface({
                     )}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={stopCallMode}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-red-200 bg-white px-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
-                  title="退出语音通话"
-                >
-                  <PhoneOff className="h-4 w-4" />
-                  退出通话
-                </button>
               </div>
             </div>
           )}
