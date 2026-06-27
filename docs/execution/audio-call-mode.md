@@ -212,7 +212,7 @@ Likely failure modes to rule out:
 
 - Added `@ricky0123/vad-web` and copied the required runtime assets into `public/vad/`: `vad.worklet.bundle.min.js`, `silero_vad_v5.onnx`, `ort-wasm-simd-threaded.mjs`, and `ort-wasm-simd-threaded.wasm`.
 - Added `lib/audioSegment.ts` for deterministic PCM duration calculation, short-segment rejection, and mono 16-bit WAV encoding from VAD `Float32Array` audio.
-- `ChatInterface` now attempts VAD first, using `preSpeechPadMs = 800`, `redemptionMs = 1200`, and `minSpeechMs = 250`. It creates the VAD instance with `startOnLoad = false`, stores the instance, then explicitly starts it so startup failures can destroy the partial instance before falling back. The VAD callback pauses listening before submitting the user turn, and assistant playback resumes VAD listening afterward.
+- `ChatInterface` now attempts VAD first, using `preSpeechPadMs = 800`, `redemptionMs = 3000`, and `minSpeechMs = 250`. It creates the VAD instance with `startOnLoad = false`, stores the instance, then explicitly starts it so startup failures can destroy the partial instance before falling back. The VAD callback pauses listening before submitting the user turn, and assistant playback resumes VAD listening afterward.
 - If VAD import, model loading, worklet loading, or microphone startup fails, `ChatInterface` falls back to the previous RMS/`MediaRecorder` path with browser echo cancellation, noise suppression, and auto gain constraints.
 - `eslint.config.mjs` now ignores `public/vad/**` because those files are vendored/minified runtime assets, not source code.
 
@@ -230,3 +230,45 @@ Likely failure modes to rule out:
   - `npm run lint`: passed with 0 errors and the pre-existing `components/ImageLightbox.tsx` `<img>` warning.
   - `npm run dev`: started on `http://localhost:3000`; local HEAD requests confirmed `200 OK` for `/vad/vad.worklet.bundle.min.js`, `/vad/silero_vad_v5.onnx`, `/vad/ort-wasm-simd-threaded.wasm`, and `/vad/ort-wasm-simd-threaded.mjs`.
 - Manual microphone workflow validation remains required in a real browser session with an audio-capable model because automated tests in this repository cannot grant microphone permission or exercise provider audio playback.
+
+## Follow-Up: VAD Pause Tolerance
+
+### Status
+
+Implemented on 2026-06-27.
+
+### Verification Contract
+
+End-to-end goal: in voice-call mode, the browser VAD path must tolerate a natural mid-sentence pause of roughly 3 seconds before treating the user turn as complete, reducing premature auto-submit while preserving the existing serial listen-record-submit flow.
+
+Correctness oracle:
+
+- `MicVAD.new` must receive `redemptionMs = 3000` through the shared VAD configuration constant.
+- The existing fallback RMS/MediaRecorder path must remain unchanged at 3 seconds of silence.
+- VAD segment validation and WAV encoding must keep passing existing tests.
+- Build and lint must continue to pass.
+
+Likely failure modes to rule out:
+
+- The old 1200 ms VAD end window remains in `ChatInterface`.
+- The VAD constant is changed in one place but the component uses a stale local value.
+- Audio utility exports break Node test execution or the Next.js production build.
+
+### Root Cause
+
+Voice-call mode now uses `@ricky0123/vad-web` as the primary speech segmentation path. The previous `redemptionMs = 1200` value meant that about 1.2 seconds of VAD-classified non-speech could trigger `onSpeechEnd`, pause VAD listening, and submit the current audio segment. That was too aggressive for normal thinking pauses or phrase boundaries.
+
+### Implementation Notes
+
+- `lib/audioSegment.ts` now exports `VAD_REDEMPTION_MS = 3000`.
+- `components/ChatInterface.tsx` imports that shared value and passes it to `MicVAD.new`.
+- Keeping the value in the audio utility module gives the behavior a direct regression test instead of leaving it as an untested component-local constant.
+
+### Validation Log
+
+- RED check: `npm test -- lib/audioSegment.test.mjs` failed because `VAD_REDEMPTION_MS` was not exported, proving the new regression test caught the missing shared configuration.
+- GREEN check: `npm test -- lib/audioSegment.test.mjs` passed; all 6 existing lib test files ran and passed.
+- `npm test`: passed; 6 test files, 6 passed.
+- `npm run build`: passed; Next.js production build compiled, type-checked, generated 5 static pages, and preserved `/api/chat/completions` as dynamic.
+- `npm run lint`: passed with 0 errors and the pre-existing `components/ImageLightbox.tsx` `<img>` warning.
+- Manual microphone workflow validation remains recommended: start voice mode in a browser, pause mid-sentence for about 2 seconds, and confirm the turn is not submitted until the pause reaches roughly 3 seconds.

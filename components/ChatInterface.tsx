@@ -44,6 +44,7 @@ import {
   calculatePcmDurationMs,
   float32PcmToWavBuffer,
   shouldSubmitVadSegment,
+  VAD_REDEMPTION_MS,
 } from '@/lib/audioSegment';
 import { convertImagesToBase64, validateImageFile } from '@/lib/imageUtils';
 import Message from './Message';
@@ -95,7 +96,6 @@ const SPEECH_LEVEL_THRESHOLD = 0.035;
 const VAD_SAMPLE_RATE = 16000;
 const VAD_ASSET_PATH = '/vad/';
 const VAD_PRE_SPEECH_PAD_MS = 800;
-const VAD_REDEMPTION_MS = 1200;
 const VAD_MIN_SPEECH_MS = 250;
 
 const isAudioModel = (model: string) => model.toLowerCase().includes('audio');

@@ -3,6 +3,8 @@ const PCM_BYTES_PER_SAMPLE = 2;
 const MONO_CHANNEL_COUNT = 1;
 const MIN_VAD_SEGMENT_MS = 100;
 
+export const VAD_REDEMPTION_MS = 3000;
+
 export function calculatePcmDurationMs(samples: Float32Array, sampleRate: number): number {
   if (sampleRate <= 0 || samples.length === 0) {
     return 0;
