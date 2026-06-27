@@ -69,7 +69,25 @@ function resolveModalities(parameters: Record<string, unknown>): unknown {
   return Array.isArray(parameters.modalities) ? parameters.modalities : ['text', 'audio'];
 }
 
-function buildAudioContent(record: AudioRecord): MessageContent {
+function requiresDataUrlAudioInput(model: string): boolean {
+  const normalizedModel = model.toLowerCase();
+  return normalizedModel.includes('qwen') && normalizedModel.includes('omni');
+}
+
+function normalizeAudioInputData(data: string, model: string): string {
+  if (
+    !requiresDataUrlAudioInput(model)
+    || data.startsWith('data:')
+    || data.startsWith('http://')
+    || data.startsWith('https://')
+  ) {
+    return data;
+  }
+
+  return `data:;base64,${data}`;
+}
+
+function buildAudioContent(record: AudioRecord, model: string): MessageContent {
   if (record.format !== 'wav' && record.format !== 'mp3') {
     throw new Error(`Unsupported input audio format: ${record.format}`);
   }
@@ -77,18 +95,18 @@ function buildAudioContent(record: AudioRecord): MessageContent {
   return {
     type: 'input_audio',
     input_audio: {
-      data: record.data,
+      data: normalizeAudioInputData(record.data, model),
       format: record.format,
     },
   };
 }
 
-function buildUserAudioMessage(record: AudioRecord, content?: string): Message {
+function buildUserAudioMessage(record: AudioRecord, model: string, content?: string): Message {
   const contentParts: MessageContent[] = [];
   if (content?.trim()) {
     contentParts.push({ type: 'text', text: content.trim() });
   }
-  contentParts.push(buildAudioContent(record));
+  contentParts.push(buildAudioContent(record, model));
 
   return {
     role: 'user',
@@ -96,7 +114,7 @@ function buildUserAudioMessage(record: AudioRecord, content?: string): Message {
   };
 }
 
-function convertStoredMessage(message: ChatMessage): Message[] {
+function convertStoredMessage(message: ChatMessage, model: string): Message[] {
   const audioRecords = message.audioRecords ?? [];
   const converted: Message[] = [];
 
@@ -107,7 +125,7 @@ function convertStoredMessage(message: ChatMessage): Message[] {
         && (record.format === 'wav' || record.format === 'mp3')
       ))
       .forEach((record, index) => {
-        converted.push(buildUserAudioMessage(record, index === 0 ? message.content : undefined));
+        converted.push(buildUserAudioMessage(record, model, index === 0 ? message.content : undefined));
       });
     return converted;
   }
@@ -141,10 +159,10 @@ export function buildAudioChatCompletionRequest({
   }
 
   for (const message of messages) {
-    apiMessages.push(...convertStoredMessage(message));
+    apiMessages.push(...convertStoredMessage(message, model));
   }
 
-  apiMessages.push(buildUserAudioMessage(currentUserAudio));
+  apiMessages.push(buildUserAudioMessage(currentUserAudio, model));
 
   return {
     model,
@@ -176,7 +194,7 @@ export function buildTextAudioChatCompletionRequest({
   }
 
   for (const message of messages) {
-    apiMessages.push(...convertStoredMessage(message));
+    apiMessages.push(...convertStoredMessage(message, model));
   }
 
   return {

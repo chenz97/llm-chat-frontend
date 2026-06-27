@@ -43,6 +43,50 @@ Likely failure modes to rule out:
 - A final low-cost live probe with a 120 ms silent WAV input, `stream: true`, `audio.format: "pcm16"`, and `max_tokens: 32` returned SSE chunks containing an assistant audio ID, transcript, audio `data`, and `[DONE]`.
 - Follow-up fix: recorded user audio is now trimmed at the first silence timestamp before WAV encoding, so the 3-second silence window used to detect turn completion is not sent to the model.
 
+## Follow-Up: Qwen Omni Local Audio Input Compatibility
+
+### Status
+
+Completed on 2026-06-27.
+
+### Verification Contract
+
+End-to-end goal: when a conversation uses a Qwen Omni audio-capable model such as `qwen3.5-omni-flash`, voice-call mode must submit the recorded user audio in the provider-accepted local Base64 format, while normal text-to-audio output for the same model and non-Qwen audio models keep their existing behavior.
+
+Correctness oracle:
+
+- Qwen Omni voice-call requests must encode browser-captured audio `input_audio.data` as a local Base64 data URL (`data:;base64,...`) so DashScope does not interpret the value as a public URL.
+- Already-normalized `data:` values and public `http(s)` URLs must not be modified.
+- Non-Qwen audio models such as `gpt-audio-mini` must continue to receive the existing bare Base64 `input_audio.data` shape.
+- Text-only audio-output requests must remain unchanged because they do not include `input_audio` content parts.
+
+Likely failure modes ruled out:
+
+- Provider rejects bare Base64 audio input with `InternalError.Algo.InvalidParameter: The provided URL does not appear to be valid`.
+- Compatibility normalization accidentally changes request shape for OpenAI/OpenRouter audio models.
+- Historical user audio replay in Qwen Omni conversations keeps sending the old bare Base64 shape.
+- Build or lint regressions in the shared audio request helper.
+
+### Root Cause
+
+Voice-call mode differs from non-voice text mode because it sends microphone audio as `input_audio` content parts. The existing request builder stored and replayed local browser audio as bare Base64 for all providers. Official DashScope Qwen-Omni documentation shows public URL input examples with `input_audio.data` set to an HTTPS URL, but its local audio Base64 example uses `input_audio.data: "data:;base64,<payload>"`. With bare Base64, Qwen Omni appears to validate the field as a URL and returns the reported invalid URL error.
+
+### Implementation Notes
+
+- `lib/audioChat.ts` now detects Qwen Omni model ids and normalizes local bare Base64 audio input into `data:;base64,...`.
+- Existing `data:`, `http://`, and `https://` audio input values are preserved as-is.
+- The normalization is applied to both the current voice turn and stored user audio history when Qwen Omni requests are built.
+- Non-Qwen models keep the old bare Base64 request shape to avoid changing behavior for providers that already work.
+
+### Validation Log
+
+- RED check: `npm test -- lib/audioChat.test.mjs` failed after adding the Qwen Omni compatibility test because request `input_audio.data` was still bare Base64.
+- GREEN check: `npm test -- lib/audioChat.test.mjs` passed after the normalization change; 6 test files passed under the existing script.
+- `npm test`: passed; 6 test files, 6 passed.
+- `npm run build`: passed; Next.js compiled, type-checked, generated 5 static pages, and preserved `/api/chat/completions` as dynamic.
+- `npm run lint`: passed with 0 errors and the pre-existing `components/ImageLightbox.tsx` `<img>` warning.
+- Manual browser verification with a real DashScope API key and microphone remains recommended: select `qwen3.5-omni-flash`, enter voice-call mode, speak one short utterance, and confirm the provider no longer returns the invalid URL error.
+
 ## Follow-Up: Browser VAD Segment Extraction
 
 ### Status
