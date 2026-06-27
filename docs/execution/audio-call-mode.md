@@ -41,3 +41,4 @@ Likely failure modes to rule out:
 - `npm run lint` passed with one pre-existing `ImageLightbox` `<img>` warning.
 - Live OpenRouter probing showed credentials were valid via `/credits`, then revealed the real audio endpoint requirements: audio output must use `stream: true`, input audio remains `wav` or `mp3`, and streamed output format must be `pcm16`.
 - A final low-cost live probe with a 120 ms silent WAV input, `stream: true`, `audio.format: "pcm16"`, and `max_tokens: 32` returned SSE chunks containing an assistant audio ID, transcript, audio `data`, and `[DONE]`.
+- Follow-up fix: recorded user audio is now trimmed at the first silence timestamp before WAV encoding, so the 3-second silence window used to detect turn completion is not sent to the model.

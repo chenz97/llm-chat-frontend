@@ -35,6 +35,7 @@ import {
   sendAudioChatCompletion,
 } from '@/lib/audioChat';
 import { parseChatDeepLinkAction } from '@/lib/chatDeepLink';
+import { resolveSpeechDurationMs, resolveTrimmedFrameCount } from '@/lib/audioTrim';
 import { convertImagesToBase64, validateImageFile } from '@/lib/imageUtils';
 import Message from './Message';
 import { Send, Image as ImageIcon, Loader2, Square, ArrowDown, Phone, PhoneOff } from 'lucide-react';
@@ -199,6 +200,7 @@ export default function ChatInterface({
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingStartedAtRef = useRef<number | null>(null);
   const silenceStartedAtRef = useRef<number | null>(null);
+  const recordingEffectiveDurationMsRef = useRef<number | null>(null);
   const isCallModeRef = useRef(false);
   const callStatusRef = useRef<CallStatus>('idle');
   const callAbortControllerRef = useRef<AbortController | null>(null);
@@ -697,9 +699,17 @@ export default function ChatInterface({
     recorder.onstop = () => {
       const chunks = recordedChunksRef.current;
       recordedChunksRef.current = [];
-      const startedAt = recordingStartedAtRef.current ?? Date.now();
+      const stoppedAt = Date.now();
+      const startedAt = recordingStartedAtRef.current ?? stoppedAt;
+      const effectiveDurationMs = recordingEffectiveDurationMsRef.current
+        ?? resolveSpeechDurationMs({
+          recordingStartedAt: startedAt,
+          silenceStartedAt: silenceStartedAtRef.current,
+          stoppedAt,
+        });
       recordingStartedAtRef.current = null;
       silenceStartedAtRef.current = null;
+      recordingEffectiveDurationMsRef.current = null;
 
       if (!isCallModeRef.current || chunks.length === 0) {
         return;
@@ -711,7 +721,7 @@ export default function ChatInterface({
         return;
       }
 
-      void createUserAudioRecord(blob, Date.now() - startedAt)
+      void createUserAudioRecord(blob, effectiveDurationMs)
         .then((record) => submitAudioTurn(record))
         .catch((error) => {
           console.error('Failed to create user audio record:', error);
@@ -725,6 +735,12 @@ export default function ChatInterface({
 
   const finishRecordingSegment = () => {
     if (callStatusRef.current !== 'recording') return;
+    const startedAt = recordingStartedAtRef.current ?? Date.now();
+    recordingEffectiveDurationMsRef.current = resolveSpeechDurationMs({
+      recordingStartedAt: startedAt,
+      silenceStartedAt: silenceStartedAtRef.current,
+      stoppedAt: Date.now(),
+    });
     setCallState('waiting_for_model', '正在等待模型回复');
     stopRecorder();
   };
@@ -887,6 +903,7 @@ export default function ChatInterface({
     recordedChunksRef.current = [];
     recordingStartedAtRef.current = null;
     silenceStartedAtRef.current = null;
+    recordingEffectiveDurationMsRef.current = null;
   };
 
   useEffect(() => {
@@ -938,11 +955,16 @@ export default function ChatInterface({
     return buffer;
   };
 
-  const encodeAudioBufferToWav = (audioBuffer: AudioBuffer): ArrayBuffer => {
+  const encodeAudioBufferToWav = (
+    audioBuffer: AudioBuffer,
+    maxDurationMs?: number
+  ): ArrayBuffer => {
     const channelCount = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
     const bytesPerSample = 2;
-    const frameCount = audioBuffer.length;
+    const frameCount = maxDurationMs !== undefined
+      ? resolveTrimmedFrameCount(audioBuffer.length, sampleRate, maxDurationMs)
+      : audioBuffer.length;
     const dataSize = frameCount * channelCount * bytesPerSample;
     const buffer = new ArrayBuffer(44 + dataSize);
     const view = new DataView(buffer);
@@ -1006,7 +1028,7 @@ export default function ChatInterface({
     if (format === 'wav' && !mimeType.includes('wav')) {
       const decodeContext = new AudioContext();
       const audioBuffer = await decodeContext.decodeAudioData(await blob.arrayBuffer());
-      const wavBuffer = encodeAudioBufferToWav(audioBuffer);
+      const wavBuffer = encodeAudioBufferToWav(audioBuffer, durationMs);
       await decodeContext.close();
       data = arrayBufferToBase64(wavBuffer);
       mimeType = 'audio/wav';
