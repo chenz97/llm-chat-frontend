@@ -27,3 +27,7 @@ export function resolveTrimmedFrameCount(
 
   return Math.min(totalFrames, Math.max(1, Math.floor((sampleRate * durationMs) / 1000)));
 }
+
+export function shouldDecodeBeforeUpload(mimeType: string): boolean {
+  return mimeType.startsWith('audio/');
+}

@@ -35,7 +35,11 @@ import {
   sendAudioChatCompletion,
 } from '@/lib/audioChat';
 import { parseChatDeepLinkAction } from '@/lib/chatDeepLink';
-import { resolveSpeechDurationMs, resolveTrimmedFrameCount } from '@/lib/audioTrim';
+import {
+  resolveSpeechDurationMs,
+  resolveTrimmedFrameCount,
+  shouldDecodeBeforeUpload,
+} from '@/lib/audioTrim';
 import { convertImagesToBase64, validateImageFile } from '@/lib/imageUtils';
 import Message from './Message';
 import { Send, Image as ImageIcon, Loader2, Square, ArrowDown, Phone, PhoneOff } from 'lucide-react';
@@ -995,20 +999,6 @@ export default function ChatInterface({
     return buffer;
   };
 
-  const blobToBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      resolve(result.includes(',') ? result.split(',')[1] : result);
-    };
-    reader.onerror = () => reject(reader.error || new Error('Failed to read audio blob'));
-    reader.readAsDataURL(blob);
-  });
-
-  const resolveAudioFormat = (mimeType: string): AudioRecord['format'] => (
-    mimeType.includes('mpeg') || mimeType.includes('mp3') ? 'mp3' : 'wav'
-  );
-
   const buildAudioSource = (audioRecord: AudioRecord) => (
     audioRecord.format === 'pcm16'
       ? `data:audio/wav;base64,${arrayBufferToBase64(wrapPcm16AsWavBuffer(audioRecord.data))}`
@@ -1021,31 +1011,29 @@ export default function ChatInterface({
     blob: Blob,
     durationMs: number
   ): Promise<AudioRecord> => {
-    let data: string;
-    let mimeType = blob.type || 'audio/wav';
-    let format = resolveAudioFormat(mimeType);
-
-    if (format === 'wav' && !mimeType.includes('wav')) {
-      const decodeContext = new AudioContext();
-      const audioBuffer = await decodeContext.decodeAudioData(await blob.arrayBuffer());
-      const wavBuffer = encodeAudioBufferToWav(audioBuffer, durationMs);
-      await decodeContext.close();
-      data = arrayBufferToBase64(wavBuffer);
-      mimeType = 'audio/wav';
-      format = 'wav';
-    } else {
-      data = await blobToBase64(blob);
+    const sourceMimeType = blob.type || 'audio/wav';
+    if (!shouldDecodeBeforeUpload(sourceMimeType)) {
+      throw new Error(`Unsupported recording MIME type: ${sourceMimeType}`);
     }
 
-    return {
-      id: generateId(),
-      role: 'user',
-      mimeType,
-      format,
-      data,
-      durationMs,
-      createdAt: Date.now(),
-    };
+    const decodeContext = new AudioContext();
+    try {
+      const audioBuffer = await decodeContext.decodeAudioData(await blob.arrayBuffer());
+      const wavBuffer = encodeAudioBufferToWav(audioBuffer, durationMs);
+      const data = arrayBufferToBase64(wavBuffer);
+
+      return {
+        id: generateId(),
+        role: 'user',
+        mimeType: 'audio/wav',
+        format: 'wav',
+        data,
+        durationMs,
+        createdAt: Date.now(),
+      };
+    } finally {
+      await decodeContext.close();
+    }
   };
 
   useEffect(() => {
