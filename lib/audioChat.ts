@@ -7,6 +7,7 @@ import type {
   ModelParameters,
   TokenUsage,
 } from '../types/index.ts';
+import { createRawResponseCapture, serializeAudioDiagnostic } from './rawResponse.ts';
 
 const DEFAULT_OUTPUT_AUDIO_FORMAT: AudioRecord['format'] = 'pcm16';
 const DEFAULT_OUTPUT_AUDIO_MIME_TYPE = 'audio/pcm';
@@ -298,7 +299,9 @@ export function extractAudioChatCompletionResponse(
     ?? '';
   const audioData = asString(audio?.data);
   const providerAudioId = asString(audio?.id);
-  const rawResponse = JSON.stringify(response, null, 2);
+  const diagnostics = createRawResponseCapture();
+  diagnostics.append(serializeAudioDiagnostic(response));
+  const rawResponse = diagnostics.value();
   const audioRecordFormat = audioData
     ? resolveAudioRecordFormat(outputFormat, audioData)
     : outputFormat;
@@ -453,7 +456,7 @@ export async function readAudioChatCompletionStream(
 
   const decoder = new TextDecoder();
   let buffer = '';
-  const rawLines: string[] = [];
+  const diagnostics = createRawResponseCapture();
   const state = {
     content: '',
     audioTranscript: '',
@@ -474,13 +477,14 @@ export async function readAudioChatCompletionStream(
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith(':')) continue;
-      rawLines.push(trimmed);
       if (trimmed === 'data: [DONE]') {
+        diagnostics.append(trimmed);
         continue;
       }
       if (!trimmed.startsWith('data: ')) continue;
 
       const data: unknown = JSON.parse(trimmed.slice(6));
+      diagnostics.append(`data: ${serializeAudioDiagnostic(data)}`);
       const streamingError = extractStreamingError(data);
       if (streamingError) {
         throw streamingError;
@@ -509,7 +513,7 @@ export async function readAudioChatCompletionStream(
       }
       : {}),
     usage: state.usage,
-    rawResponse: rawLines.join('\n'),
+    rawResponse: diagnostics.value(),
     provider: state.provider,
   };
 }

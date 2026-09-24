@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Conversation } from '@/types';
 import {
   getConversation,
-  getConversations,
+  getConversationSummaries,
+  getConversationSummary,
   saveConversation,
   generateId,
   setCurrentConversationId,
@@ -87,7 +88,7 @@ export default function Home() {
 
       const storedConversationId = await getCurrentConversationId();
       const storedConversation = storedConversationId
-        ? await getConversation(storedConversationId)
+        ? await getConversationSummary(storedConversationId)
         : undefined;
 
       if (cancelled) return;
@@ -113,7 +114,7 @@ export default function Home() {
       }
 
       if (!apiConfigIdToUse) {
-        const existingConversations = await getConversations();
+        const existingConversations = await getConversationSummaries();
         if (cancelled) return;
 
         if (existingConversations.length > 0) {

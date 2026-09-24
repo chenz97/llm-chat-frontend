@@ -147,6 +147,8 @@ export interface Conversation {
   updatedAt: number;
 }
 
+export type ConversationSummary = Omit<Conversation, 'messages'>;
+
 export interface SettingsExport {
   version: 1;
   exportedAt: number;

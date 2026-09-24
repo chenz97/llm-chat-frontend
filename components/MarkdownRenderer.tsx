@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, Copy } from 'lucide-react';
-import { isValidElement, useState } from 'react';
+import { isValidElement, memo, useState } from 'react';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -191,7 +191,7 @@ function normalizeMathDelimiters(source: string): string {
   return output.join('\n');
 }
 
-export default function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
+function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   return (
     <div className={`markdown-body prose prose-invert max-w-none ${className}`.trim()}>
       <ReactMarkdown
@@ -237,3 +237,5 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
     </div>
   );
 }
+
+export default memo(MarkdownRenderer);

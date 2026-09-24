@@ -18,6 +18,7 @@ The repository is currently in a local-first MVP hardening phase. The primary en
 - Manual GitHub Gist settings sync from the Import/Export settings page.
 - URL deep-link prompt fill and autosend support for command-driven browser launch workflows.
 - Chat Completions audio call mode with browser VAD speech segmentation, RMS/`MediaRecorder` fallback, visible call states, prior user-audio context, assistant text context, and per-message audio replay controls.
+- Conversation memory hardening: metadata/search index, bounded diagnostics without duplicate audio, serialized partial saves, paged message rendering, and playback cleanup.
 - Baseline project documentation under `docs/`.
 - README alignment with the current IndexedDB-first storage model, proxy behavior, and repository structure.
 
@@ -41,7 +42,7 @@ The following items are reasonable next candidates, but they are not yet committ
 
 ## Risks And Maintenance Watchpoints
 
-- Automated tests currently cover only focused settings-transfer logic, so regressions in browser storage, UI flows, and streaming parsing are still likely to be discovered manually.
+- Focused Node tests cover settings transfer, deep links, audio helpers, search indexing, and diagnostic limits. An isolated Chrome script covers migration, index maintenance, search, message pagination, and retained heap; real microphone/provider behavior still needs manual validation.
 - Browser storage limits can prevent saving large histories or many image-heavy conversations.
 - Browser storage and provider request limits can be reached faster by full-history audio conversations because audio payloads are stored inline and resent each voice turn.
 - Voice-call mode now depends on local VAD model, worklet, and ONNX Runtime WASM assets under `public/vad/`; deployment pipelines must preserve those files and serve them with normal static-asset access.

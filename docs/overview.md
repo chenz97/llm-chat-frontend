@@ -10,7 +10,7 @@ The current implementation is centered on practical experimentation with differe
 
 - Configure one or more provider endpoints with base URL, API key, and available model IDs.
 - Start a conversation, pick an assistant preset and model, and send text prompts, multimodal prompts with one or more uploaded images, or phone-like audio turns with supported Chat Completions audio models.
-- Read streamed assistant output with markdown, code highlighting, math rendering, token usage, reasoning text, and optional raw SSE event inspection.
+- Read streamed assistant output with markdown, code highlighting, math rendering, token usage, reasoning text, and optional bounded SSE diagnostic inspection.
 - Regenerate or edit messages while keeping the conversation history in local browser storage.
 - Export and import API settings and assistant presets as JSON backups.
 - Manually sync API settings and assistant presets through a user-configured private GitHub Gist.
@@ -42,14 +42,13 @@ The codebase currently implements the following stable product scope:
 - Mobile browsers may suspend or terminate in-flight streaming requests when the page enters the background or the device is locked. The app mitigates this by preserving partial output, but it does not guarantee uninterrupted background streaming.
 - API keys are entered in the browser UI and stored locally in the browser. When the optional Vercel proxy path is used, the browser still sends the saved API key to the application server for forwarding.
 - GitHub Gist sync uses a browser-stored GitHub token and direct GitHub REST API calls; the token is not included in settings export files.
-- Automated coverage is currently limited to focused Node tests for settings transfer, deep links, sync helpers, and audio request construction. Broader UI, microphone, and chat-flow validation still relies on build, lint, and manual/browser checks.
+- Automated coverage is currently limited to focused Node tests for settings transfer, deep links, sync helpers, and audio request construction. An isolated Chrome regression script covers conversation indexing and memory behavior. Broader microphone and chat-flow validation still relies on build, lint, and manual/browser checks.
 
 ## Non-Goals
 
 The current implementation does not aim to provide:
 
-- Multi-user collaboration, accounts, or cloud sync.
-- Multi-user collaboration or accounts.
+- Multi-user collaboration, accounts, or conversation cloud sync.
 - Server-side secret management, key vault integration, or tenant isolation.
 - Retrieval-augmented generation, document indexing, or knowledge-base features.
 - Workflow orchestration, tool calling UI, agent management, or OpenAI API surfaces beyond chat-completions and responses.

@@ -23,8 +23,8 @@ The application uses IndexedDB as the durable store because conversations and se
 Database details in `lib/storage.ts`:
 
 - database name: `llm_chat_db`
-- schema version: `3`
-- stores: `api_configs`, `conversations`, `assistant_presets`, `meta`
+- schema version: `4`
+- stores: `api_configs`, `conversations`, `conversation_index`, `assistant_presets`, `meta`
 
 Design choices:
 
@@ -33,13 +33,15 @@ Design choices:
 - Small global selectors such as current conversation and default preset are stored in the `meta` store.
 - Storage helpers return application-shaped values rather than exposing raw IndexedDB operations to components.
 
+The conversation index stores metadata plus lowercase title and message content for case-insensitive, multi-keyword search. It excludes media, reasoning, and raw responses. Reads visit index entries individually and return only `ConversationSummary` metadata, so the sidebar never holds complete histories. A version upgrade builds existing entries using a cursor; saves, partial updates, and deletions maintain both stores atomically. Existing conversation records remain intact.
+
 ## Conversation Bootstrap Design
 
 `app/page.tsx` implements a deterministic startup sequence:
 
 1. Load API configurations.
 2. If none exist, open the settings modal.
-3. Try the stored current conversation ID and only restore it if its referenced API config still exists.
+3. Read the stored current conversation summary and reuse its configuration if its API config still exists.
 4. Otherwise fall back to the most recently updated valid conversation.
 5. Otherwise fall back to the default preset and its provider when available.
 6. Otherwise use the first configured provider.
@@ -73,7 +75,7 @@ Voice-call history sends saved user audio as `input_audio` content parts and sen
 
 ## Streaming And Persistence Design
 
-`lib/api.ts` parses server-sent events line by line instead of relying on a provider SDK. This keeps the frontend provider-agnostic and allows the app to retain raw event lines for debugging.
+`lib/api.ts` parses server-sent events line by line instead of relying on a provider SDK. This keeps the frontend provider-agnostic and allows the app to retain bounded event diagnostics for debugging.
 
 Extraction behavior:
 
@@ -87,7 +89,7 @@ Persisted `reasoningDetails` remain useful for UI inspection and later replay, b
 
 `ChatInterface` persists streamed content in two stages:
 
-- partial persistence through a throttled `updateConversationMessages` path during streaming,
+- partial persistence through a throttled `updateConversationMessages` path during streaming, with at most one in-flight write and one latest pending message snapshot,
 - final persistence through `saveConversation` after completion, manual stop, or transport interruption.
 
 Additional interruption behavior:
@@ -97,6 +99,12 @@ Additional interruption behavior:
 - when the page is backgrounded, `ChatInterface` flushes any queued partial persistence immediately so mobile lock-screen interruption is less likely to lose the most recent streamed text.
 
 This approach reduces write frequency while keeping long responses recoverable if the user navigates away mid-stream or a browser terminates the streaming connection in the background.
+
+## Memory and Rendering
+
+`lib/rawResponse.ts` caps newly captured diagnostics at 65,536 JavaScript characters plus an explicit truncation notice. Audio diagnostics replace `audio.data` with an omission marker before capture, while the complete playback payload remains in `AudioRecord`. Existing saved diagnostics remain unchanged. This limit does not affect generated text, reasoning metadata, or audio.
+
+`MessageList` initially renders the latest 40 messages; an earlier-messages button adds 40 at a time and preserves the reading position. The full active conversation remains available for requests and edits. `MarkdownRenderer` skips parsing when its content and styling props are unchanged. `lib/audioPlayback.ts` encodes recordings in chunks and decodes playback into Blob parts; PCM playback adds a WAV header without converting the audio back into base64. Playback revokes object URLs and clears media sources and handlers on completion, failure, replacement, and unmount; cancelling call playback also settles the waiting promise. VAD remains an on-demand import when starting a call.
 
 ## Server Proxy Contract
 

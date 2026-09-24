@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import {
   AudioRecord,
@@ -35,6 +35,8 @@ import {
   sendAudioChatCompletion,
 } from '@/lib/audioChat';
 import { parseChatDeepLinkAction } from '@/lib/chatDeepLink';
+import { arrayBufferToBase64, createAudioPlaybackBlob } from '@/lib/audioPlayback';
+import { createRawResponseCapture } from '@/lib/rawResponse';
 import {
   resolveSpeechDurationMs,
   resolveTrimmedFrameCount,
@@ -47,7 +49,7 @@ import {
   VAD_REDEMPTION_MS,
 } from '@/lib/audioSegment';
 import { convertImagesToBase64, validateImageFile } from '@/lib/imageUtils';
-import Message from './Message';
+import MessageList from './MessageList';
 import { Send, Image as ImageIcon, Loader2, Square, ArrowDown, Phone, PhoneOff } from 'lucide-react';
 
 interface ChatInterfaceProps {
@@ -207,6 +209,7 @@ export default function ChatInterface({
   const streamWasBackgroundedRef = useRef(false);
   const lastPersistAtRef = useRef(0);
   const persistTimerRef = useRef<number | null>(null);
+  const persistInFlightRef = useRef(false);
   const pendingPersistRef = useRef<{ id: string; messages: ChatMessage[] } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const deepLinkActionHandledRef = useRef(false);
@@ -224,6 +227,7 @@ export default function ChatInterface({
   const callStatusRef = useRef<CallStatus>('idle');
   const callAbortControllerRef = useRef<AbortController | null>(null);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
+  const finishPlaybackRef = useRef<(() => void) | null>(null);
   const micVadRef = useRef<MicVadInstance | null>(null);
   const releaseCallResourcesRef = useRef<() => void>(() => {});
 
@@ -399,7 +403,12 @@ export default function ChatInterface({
     message.id === messageId ? updater(message) : message
   ));
 
-  const flushPendingPersist = async () => {
+  const flushPendingPersist = useCallback(async (): Promise<void> => {
+    if (persistTimerRef.current !== null) {
+      window.clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    if (persistInFlightRef.current) return;
     const pending = pendingPersistRef.current;
     if (!pending) {
       persistTimerRef.current = null;
@@ -408,12 +417,21 @@ export default function ChatInterface({
 
     pendingPersistRef.current = null;
     persistTimerRef.current = null;
-    await updateConversationMessages(pending.id, pending.messages);
-    lastPersistAtRef.current = Date.now();
-  };
+    persistInFlightRef.current = true;
+    try {
+      await updateConversationMessages(pending.id, pending.messages);
+    } finally {
+      persistInFlightRef.current = false;
+      lastPersistAtRef.current = Date.now();
+      if (pendingPersistRef.current && persistTimerRef.current === null) {
+        persistTimerRef.current = window.setTimeout(() => void flushPendingPersist(), 400);
+      }
+    }
+  }, []);
 
   const persistStreamMessages = (conversationId: string, messagesToPersist: ChatMessage[]) => {
     pendingPersistRef.current = { id: conversationId, messages: messagesToPersist };
+    if (persistInFlightRef.current) return;
 
     const now = Date.now();
     if (now - lastPersistAtRef.current > 400) {
@@ -498,17 +516,31 @@ export default function ChatInterface({
     stopPlaybackAudio();
 
     await new Promise<void>((resolve) => {
-      const audio = new Audio(buildAudioSource(audioRecord));
+      const url = URL.createObjectURL(createAudioPlaybackBlob(audioRecord));
+      const audio = new Audio(url);
       playbackAudioRef.current = audio;
-      audio.onended = () => resolve();
-      audio.onerror = () => resolve();
+      const finish = () => {
+        if (playbackAudioRef.current === audio) {
+          playbackAudioRef.current = null;
+          finishPlaybackRef.current = null;
+        }
+        audio.onended = null;
+        audio.onerror = null;
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+      finishPlaybackRef.current = finish;
+      audio.onended = finish;
+      audio.onerror = finish;
       void audio.play().catch((error) => {
         console.error('Failed to play assistant audio:', error);
-        resolve();
+        finish();
       });
     });
 
-    playbackAudioRef.current = null;
     if (isCallModeRef.current) {
       const didResume = await resumeVadListening();
       if (didResume) {
@@ -1011,10 +1043,7 @@ export default function ChatInterface({
   };
 
   const stopPlaybackAudio = () => {
-    if (playbackAudioRef.current) {
-      playbackAudioRef.current.pause();
-      playbackAudioRef.current = null;
-    }
+    finishPlaybackRef.current?.();
   };
 
   const stopRecorder = () => {
@@ -1069,49 +1098,10 @@ export default function ChatInterface({
     releaseCallResourcesRef.current = releaseCallResources;
   });
 
-  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (const byte of bytes) {
-      binary += String.fromCharCode(byte);
-    }
-    return window.btoa(binary);
-  };
-
   const writeString = (view: DataView, offset: number, value: string) => {
     for (let index = 0; index < value.length; index += 1) {
       view.setUint8(offset + index, value.charCodeAt(index));
     }
-  };
-
-  const base64ToBytes = (data: string): Uint8Array => {
-    const raw = window.atob(data.includes(',') ? data.split(',')[1] : data);
-    const bytes = new Uint8Array(raw.length);
-    for (let index = 0; index < raw.length; index += 1) {
-      bytes[index] = raw.charCodeAt(index);
-    }
-    return bytes;
-  };
-
-  const wrapPcm16AsWavBuffer = (data: string, sampleRate = 24000): ArrayBuffer => {
-    const pcmBytes = base64ToBytes(data);
-    const buffer = new ArrayBuffer(44 + pcmBytes.byteLength);
-    const view = new DataView(buffer);
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + pcmBytes.byteLength, true);
-    writeString(view, 8, 'WAVE');
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeString(view, 36, 'data');
-    view.setUint32(40, pcmBytes.byteLength, true);
-    new Uint8Array(buffer, 44).set(pcmBytes);
-    return buffer;
   };
 
   const encodeAudioBufferToWav = (
@@ -1153,14 +1143,6 @@ export default function ChatInterface({
 
     return buffer;
   };
-
-  const buildAudioSource = (audioRecord: AudioRecord) => (
-    audioRecord.format === 'pcm16'
-      ? `data:audio/wav;base64,${arrayBufferToBase64(wrapPcm16AsWavBuffer(audioRecord.data))}`
-      : (audioRecord.data.startsWith('data:')
-      ? audioRecord.data
-      : `data:${audioRecord.mimeType};base64,${audioRecord.data}`)
-  );
 
   const createUserAudioRecord = async (
     blob: Blob,
@@ -1214,7 +1196,7 @@ export default function ChatInterface({
       window.removeEventListener('pagehide', flushForBackground);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [flushPendingPersist]);
 
   useEffect(() => () => {
     releaseCallResourcesRef.current();
@@ -1310,7 +1292,7 @@ export default function ChatInterface({
     let accumulatedReasoning = '';
     let latestUsage: TokenUsage | null = null;
     let responseId: string | undefined;
-    const rawResponseLines: string[] = [];
+    const diagnostics = createRawResponseCapture();
 
     const requestApi = normalizeRequestApi(resolvedPreset?.requestApi);
     const model = conversation.modelIdOverride
@@ -1363,10 +1345,6 @@ export default function ChatInterface({
       ? { cacheControl: request.cache_control }
       : undefined;
 
-    const rawResponse = () => rawResponseLines.length > 0
-      ? rawResponseLines.join('\n')
-      : undefined;
-
     const updateStreamingAssistant = (updater: (message: ChatMessage) => ChatMessage) => {
       streamMessages = updateMessageById(streamMessages, assistantMessageId, updater);
       messagesRef.current = streamMessages;
@@ -1389,7 +1367,7 @@ export default function ChatInterface({
         ? accumulatedReasoningDetails
         : undefined,
       responseId,
-      rawResponse: rawResponse(),
+      rawResponse: diagnostics.value(),
       usage: latestUsage || undefined,
       providerMetadata: accumulatedProviderMetadata,
       ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
@@ -1508,7 +1486,7 @@ export default function ChatInterface({
             }));
           },
           onRawEvent: (rawLine) => {
-            rawResponseLines.push(rawLine);
+            diagnostics.append(rawLine);
           },
           onError: (error) => {
             if (error.name === 'AbortError') {
@@ -1737,17 +1715,14 @@ export default function ChatInterface({
         onScroll={handleScroll}
         className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-4 pt-3 pb-3"
       >
-        <div className="space-y-2.5">
-          {messages.map((message) => (
-            <Message
-              key={message.id}
-              message={message}
-              onEdit={handleEditMessage}
-              onRegenerate={handleRegenerate}
-              assistantName={assistantPreset?.name}
-            />
-          ))}
-        </div>
+        <MessageList
+          key={conversation.id}
+          messages={messages}
+          scrollContainerRef={scrollContainerRef}
+          onEdit={handleEditMessage}
+          onRegenerate={handleRegenerate}
+          assistantName={assistantPreset?.name}
+        />
       </div>
 
       {!isAutoScrollEnabled && (

@@ -1,4 +1,6 @@
-import type { ApiConfig, AssistantPreset, Conversation, ChatMessage, SettingsSyncConfig } from '@/types';
+import type { ApiConfig, AssistantPreset, Conversation, ConversationSummary, ChatMessage, SettingsSyncConfig } from '@/types';
+import { indexConversation, matchesConversationIndex, summarizeConversation } from './conversationIndex';
+import type { ConversationIndexEntry } from './conversationIndex';
 
 const STORAGE_KEYS = {
   API_CONFIGS: 'llm_chat_api_configs',
@@ -10,7 +12,7 @@ const STORAGE_KEYS = {
 
 const DB_CONFIG = {
   NAME: 'llm_chat_db',
-  VERSION: 3,
+  VERSION: 4,
 } as const;
 
 const DB_OPEN_TIMEOUT = 2000;
@@ -18,6 +20,7 @@ const DB_OPEN_TIMEOUT = 2000;
 const DB_STORES = {
   API_CONFIGS: 'api_configs',
   CONVERSATIONS: 'conversations',
+  CONVERSATION_INDEX: 'conversation_index',
   ASSISTANT_PRESETS: 'assistant_presets',
   META: 'meta',
 } as const;
@@ -115,10 +118,26 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(DB_STORES.META)) {
         db.createObjectStore(DB_STORES.META, { keyPath: 'key' });
       }
+      if (!db.objectStoreNames.contains(DB_STORES.CONVERSATION_INDEX)) {
+        const index = db.createObjectStore(DB_STORES.CONVERSATION_INDEX, { keyPath: 'id' });
+        const cursorRequest = request.transaction!.objectStore(DB_STORES.CONVERSATIONS).openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          index.put(indexConversation(cursor.value));
+          cursor.continue();
+        };
+      }
+      // Large histories can take longer to migrate than a normal database open.
+      window.clearTimeout(timer);
     };
 
     request.onsuccess = () => {
       const db = request.result;
+      if (settled) {
+        db.close();
+        return;
+      }
       finalize(db);
       resolve(db);
     };
@@ -672,6 +691,72 @@ export async function setDefaultPresetId(id: string | null): Promise<void> {
 }
 
 // Conversations
+export async function getConversationSummaries(query = ''): Promise<ConversationSummary[]> {
+  if (!isIndexedDbAvailable()) return [];
+
+  try {
+    const db = await openDb();
+    const hasIndex = hasStore(db, DB_STORES.CONVERSATION_INDEX);
+    const tx = db.transaction(hasIndex ? DB_STORES.CONVERSATION_INDEX : DB_STORES.CONVERSATIONS, 'readonly');
+    const done = transactionComplete(tx);
+    const store = tx.objectStore(hasIndex ? DB_STORES.CONVERSATION_INDEX : DB_STORES.CONVERSATIONS);
+    const summaries: ConversationSummary[] = [];
+    const request = store.openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const entry: ConversationIndexEntry = hasIndex ? cursor.value : indexConversation(cursor.value);
+      if (matchesConversationIndex(entry, query)) {
+        // Never retain search text or message payloads in the sidebar.
+        summaries.push(summarizeConversation(entry));
+      }
+      cursor.continue();
+    };
+    await done;
+    return summaries.sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch (error) {
+    console.error('Error loading conversation summaries from IndexedDB:', error);
+    return [];
+  }
+}
+
+export async function getConversationSummary(id: string): Promise<ConversationSummary | undefined> {
+  if (!isIndexedDbAvailable()) return undefined;
+  try {
+    const db = await openDb();
+    if (!hasStore(db, DB_STORES.CONVERSATION_INDEX)) {
+      const conversation = await getConversation(id);
+      return conversation ? summarizeConversation(conversation) : undefined;
+    }
+    const tx = db.transaction(DB_STORES.CONVERSATION_INDEX, 'readonly');
+    const done = transactionComplete(tx);
+    const entry = await requestToPromise<ConversationIndexEntry | undefined>(
+      tx.objectStore(DB_STORES.CONVERSATION_INDEX).get(id)
+    );
+    await done;
+    return entry ? summarizeConversation(entry) : undefined;
+  } catch (error) {
+    console.error('Error loading conversation summary from IndexedDB:', error);
+    return undefined;
+  }
+}
+
+function conversationWriteTransaction(db: IDBDatabase): IDBTransaction {
+  return db.transaction(
+    hasStore(db, DB_STORES.CONVERSATION_INDEX)
+      ? [DB_STORES.CONVERSATIONS, DB_STORES.CONVERSATION_INDEX]
+      : DB_STORES.CONVERSATIONS,
+    'readwrite'
+  );
+}
+
+function putConversation(tx: IDBTransaction, conversation: Conversation): void {
+  tx.objectStore(DB_STORES.CONVERSATIONS).put(conversation);
+  if (tx.objectStoreNames.contains(DB_STORES.CONVERSATION_INDEX)) {
+    tx.objectStore(DB_STORES.CONVERSATION_INDEX).put(indexConversation(conversation));
+  }
+}
+
 export async function getConversations(): Promise<Conversation[]> {
   if (!isIndexedDbAvailable()) return [];
 
@@ -693,15 +778,14 @@ export async function saveConversation(conversation: Conversation): Promise<bool
 
   try {
     const db = await openDb();
-    const tx = db.transaction(DB_STORES.CONVERSATIONS, 'readwrite');
-    const store = tx.objectStore(DB_STORES.CONVERSATIONS);
+    const tx = conversationWriteTransaction(db);
 
     const payload = {
       ...conversation,
       updatedAt: Date.now(),
     };
 
-    store.put(payload);
+    putConversation(tx, payload);
     await transactionComplete(tx);
     return true;
   } catch (error) {
@@ -718,7 +802,7 @@ export async function updateConversationMessages(
 
   try {
     const db = await openDb();
-    const tx = db.transaction(DB_STORES.CONVERSATIONS, 'readwrite');
+    const tx = conversationWriteTransaction(db);
     const store = tx.objectStore(DB_STORES.CONVERSATIONS);
     const existing = await requestToPromise<Conversation | undefined>(store.get(conversationId));
 
@@ -727,7 +811,7 @@ export async function updateConversationMessages(
       return false;
     }
 
-    store.put({
+    putConversation(tx, {
       ...existing,
       messages,
     });
@@ -745,9 +829,12 @@ export async function deleteConversation(id: string): Promise<void> {
   try {
     const currentId = await getCurrentConversationId();
     const db = await openDb();
-    const tx = db.transaction(DB_STORES.CONVERSATIONS, 'readwrite');
+    const tx = conversationWriteTransaction(db);
     const store = tx.objectStore(DB_STORES.CONVERSATIONS);
     store.delete(id);
+    if (tx.objectStoreNames.contains(DB_STORES.CONVERSATION_INDEX)) {
+      tx.objectStore(DB_STORES.CONVERSATION_INDEX).delete(id);
+    }
     await transactionComplete(tx);
 
     if (currentId === id) {

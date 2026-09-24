@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChatMessage } from '@/types';
+import { AudioRecord, ChatMessage } from '@/types';
+import { createAudioPlaybackBlob } from '@/lib/audioPlayback';
 import { getMessageImageUrls } from '@/lib/imageUtils';
 import MarkdownRenderer from './MarkdownRenderer';
 import ImageLightbox from './ImageLightbox';
@@ -40,6 +41,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
   const reasoningContainerRef = useRef<HTMLDivElement>(null);
   const shouldStickReasoningScrollRef = useRef(true);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
 
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
@@ -158,88 +160,52 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
     setIsEditing(false);
   };
 
-  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (const byte of bytes) {
-      binary += String.fromCharCode(byte);
-    }
-    return window.btoa(binary);
-  };
-
-  const writeString = (view: DataView, offset: number, value: string) => {
-    for (let index = 0; index < value.length; index += 1) {
-      view.setUint8(offset + index, value.charCodeAt(index));
-    }
-  };
-
-  const base64ToBytes = (data: string): Uint8Array => {
-    const raw = window.atob(data.includes(',') ? data.split(',')[1] : data);
-    const bytes = new Uint8Array(raw.length);
-    for (let index = 0; index < raw.length; index += 1) {
-      bytes[index] = raw.charCodeAt(index);
-    }
-    return bytes;
-  };
-
-  const wrapPcm16AsWav = (data: string, sampleRate = 24000): string => {
-    const pcmBytes = base64ToBytes(data);
-    const buffer = new ArrayBuffer(44 + pcmBytes.byteLength);
-    const view = new DataView(buffer);
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + pcmBytes.byteLength, true);
-    writeString(view, 8, 'WAVE');
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeString(view, 36, 'data');
-    view.setUint32(40, pcmBytes.byteLength, true);
-    new Uint8Array(buffer, 44).set(pcmBytes);
-    return `data:audio/wav;base64,${arrayBufferToBase64(buffer)}`;
-  };
-
-  const buildAudioSource = (data: string, mimeType: string, format?: string) => {
-    if (format === 'pcm16') {
-      return wrapPcm16AsWav(data);
-    }
-    return (
-    data.startsWith('data:') ? data : `data:${mimeType};base64,${data}`
-    );
-  };
-
   const handleToggleAudio = (
     audioId: string,
     data: string,
     mimeType: string,
-    format?: string
+    format: AudioRecord['format']
   ) => {
     const currentAudio = audioElementRef.current;
     if (playingAudioId === audioId && currentAudio) {
-      currentAudio.pause();
+      releaseAudio();
       setPlayingAudioId(null);
       return;
     }
 
-    currentAudio?.pause();
-    const audio = new Audio(buildAudioSource(data, mimeType, format));
+    releaseAudio();
+    const url = URL.createObjectURL(createAudioPlaybackBlob({ data, mimeType, format }));
+    audioUrlRef.current = url;
+    const audio = new Audio(url);
     audioElementRef.current = audio;
     setPlayingAudioId(audioId);
-    audio.onended = () => setPlayingAudioId(null);
-    audio.onerror = () => setPlayingAudioId(null);
+    const finish = () => {
+      if (audioElementRef.current !== audio) return;
+      releaseAudio();
+      setPlayingAudioId(null);
+    };
+    audio.onended = finish;
+    audio.onerror = finish;
     void audio.play().catch((error) => {
       console.error('Failed to play audio record:', error);
-      setPlayingAudioId(null);
+      finish();
     });
   };
 
-  useEffect(() => () => {
-    audioElementRef.current?.pause();
-  }, []);
+  const releaseAudio = () => {
+    const audio = audioElementRef.current;
+    if (!audio) return;
+    audioElementRef.current = null;
+    audio.onended = null;
+    audio.onerror = null;
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = null;
+  };
+
+  useEffect(() => () => releaseAudio(), []);
 
   if (isSystem) {
     return (
