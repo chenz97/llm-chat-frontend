@@ -3,8 +3,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { ApiConfig } from '@/types';
 import { showFloatingStatus } from '@/lib/floatingStatus';
-import { getApiConfigs, saveApiConfig, deleteApiConfig, generateId } from '@/lib/storage';
+import { getApiConfigs, saveApiConfig, setApiConfigs, deleteApiConfig, generateId } from '@/lib/storage';
+import { getNextSortOrder, reorderItems } from '@/lib/sortOrder';
 import { Plus, Trash2, Edit2, Check, X } from 'lucide-react';
+import SortableList from './SortableList';
 
 export default function ApiConfigManager() {
   const [configs, setConfigs] = useState<ApiConfig[]>([]);
@@ -12,6 +14,7 @@ export default function ApiConfigManager() {
   const [formData, setFormData] = useState<Partial<ApiConfig>>({});
   const [modelsInput, setModelsInput] = useState('');
   const [mounted, setMounted] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
   const pendingScrollIdRef = useRef<string | null>(null);
   const newConfigRef = useRef<HTMLDivElement | null>(null);
 
@@ -67,6 +70,7 @@ export default function ApiConfigManager() {
       apiKey: '',
       models: [],
       createdAt: Date.now(),
+      sortOrder: getNextSortOrder(configs),
     };
     pendingScrollIdRef.current = newConfig.id;
     setEditing(newConfig.id);
@@ -77,6 +81,8 @@ export default function ApiConfigManager() {
   const handleSave = async () => {
     if (!formData.id) return;
 
+    // Prefer the current list position in case the list was reordered while editing.
+    const sortOrder = configs.find((c) => c.id === formData.id)?.sortOrder ?? formData.sortOrder;
     const config: ApiConfig = {
       id: formData.id,
       name: formData.name || 'Unnamed Config',
@@ -84,6 +90,7 @@ export default function ApiConfigManager() {
       apiKey: formData.apiKey || '',
       models: formData.models || [],
       createdAt: formData.createdAt || Date.now(),
+      ...(sortOrder !== undefined ? { sortOrder } : {}),
     };
 
     const didSave = await saveApiConfig(config);
@@ -133,6 +140,28 @@ export default function ApiConfigManager() {
     }
   };
 
+  const handleReorder = async (activeId: string, overId: string) => {
+    const reordered = reorderItems(configs, activeId, overId);
+    if (!reordered) return;
+
+    const previous = configs;
+    setConfigs(reordered);
+    setIsReordering(true);
+    const didSave = await setApiConfigs(reordered);
+    setIsReordering(false);
+
+    if (!didSave) {
+      setConfigs(previous);
+      showFloatingStatus({
+        kind: 'error',
+        message: 'Failed to save API configuration order. Your browser storage may be full.',
+      });
+      return;
+    }
+
+    window.dispatchEvent(new Event('settingsUpdated'));
+  };
+
   const handleCancel = () => {
     if (editing && !configs.find(c => c.id === editing)) {
       // Was adding a new config, just cancel
@@ -165,12 +194,14 @@ export default function ApiConfigManager() {
       </div>
 
       <div className="space-y-2.5">
-        {configs.map(config => (
-          <div
-            key={config.id}
-            className="app-panel p-4 sm:p-5"
-          >
-            {editing === config.id ? (
+        <SortableList
+          items={configs}
+          disabled={isReordering}
+          className="space-y-2.5"
+          itemClassName="app-panel p-4 sm:p-5"
+          getItemLabel={(config) => config.name}
+          onReorder={(activeId, overId) => void handleReorder(activeId, overId)}
+          renderItem={(config, dragHandle) => (editing === config.id ? (
               <div className="space-y-3">
                 <input
                   type="text"
@@ -219,8 +250,9 @@ export default function ApiConfigManager() {
               </div>
             ) : (
               <div>
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
+                <div className="flex justify-between items-start gap-2">
+                  <div className="-ml-2 pt-0.5">{dragHandle}</div>
+                  <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-xl text-slate-900">{config.name}</h3>
                     <p className="text-base text-slate-600 mt-1">{config.baseUrl}</p>
                     <p className="text-sm text-slate-500 mt-1">
@@ -253,9 +285,8 @@ export default function ApiConfigManager() {
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-        ))}
+            ))}
+        />
 
         {editing && !configs.find(c => c.id === editing) && (
           <div

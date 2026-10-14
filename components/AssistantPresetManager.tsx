@@ -6,6 +6,7 @@ import { showFloatingStatus } from '@/lib/floatingStatus';
 import {
   getAssistantPresets,
   saveAssistantPreset,
+  setAssistantPresets,
   deleteAssistantPreset,
   generateId,
   getApiConfigs,
@@ -14,7 +15,9 @@ import {
   hasAssistantPresetsMigrationNotice,
   clearAssistantPresetsMigrationNotice,
 } from '@/lib/storage';
+import { getNextSortOrder, reorderItems } from '@/lib/sortOrder';
 import { Plus, Trash2, Edit2, Check, X, Star } from 'lucide-react';
+import SortableList from './SortableList';
 
 const REQUEST_API_OPTIONS: Array<{ value: RequestApi; label: string }> = [
   { value: 'chat_completions', label: 'Chat Completions API' },
@@ -37,6 +40,7 @@ export default function AssistantPresetManager() {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [apiConfigs, setApiConfigs] = useState<ApiConfig[]>([]);
   const [mounted, setMounted] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
   const [defaultPresetId, setDefaultPresetIdState] = useState<string | null>(null);
   const [migrationNotice, setMigrationNotice] = useState<string | null>(null);
   const pendingScrollIdRef = useRef<string | null>(null);
@@ -162,6 +166,7 @@ export default function AssistantPresetManager() {
       useVercelServerProxy: false,
       isVisible: true,
       createdAt: Date.now(),
+      sortOrder: getNextSortOrder(presets),
     };
     pendingScrollIdRef.current = newPreset.id;
     setEditing(newPreset.id);
@@ -171,6 +176,8 @@ export default function AssistantPresetManager() {
   const handleSave = async () => {
     if (!formData.id) return;
 
+    // Prefer the current list position in case the list was reordered while editing.
+    const sortOrder = presets.find((p) => p.id === formData.id)?.sortOrder ?? formData.sortOrder;
     const preset: AssistantPreset = {
       id: formData.id,
       name: formData.name || 'Unnamed Assistant',
@@ -182,6 +189,7 @@ export default function AssistantPresetManager() {
       useVercelServerProxy: formData.useVercelServerProxy === true,
       isVisible: formData.isVisible !== false,
       createdAt: formData.createdAt || Date.now(),
+      ...(sortOrder !== undefined ? { sortOrder } : {}),
     };
 
     const didSave = await saveAssistantPreset(preset);
@@ -276,6 +284,28 @@ export default function AssistantPresetManager() {
     void runToggle();
   };
 
+  const handleReorder = async (activeId: string, overId: string) => {
+    const reordered = reorderItems(presets, activeId, overId);
+    if (!reordered) return;
+
+    const previous = presets;
+    setPresets(reordered);
+    setIsReordering(true);
+    const didSave = await setAssistantPresets(reordered);
+    setIsReordering(false);
+
+    if (!didSave) {
+      setPresets(previous);
+      showFloatingStatus({
+        kind: 'error',
+        message: 'Failed to save assistant preset order. Your browser storage may be full.',
+      });
+      return;
+    }
+
+    window.dispatchEvent(new Event('settingsUpdated'));
+  };
+
   const handleCancel = () => {
     setEditing(null);
     setFormData({});
@@ -363,12 +393,14 @@ export default function AssistantPresetManager() {
       )}
 
       <div className="space-y-3">
-        {presets.map(preset => (
-          <div
-            key={preset.id}
-            className="app-panel p-4 sm:p-5"
-          >
-            {editing === preset.id ? (
+        <SortableList
+          items={presets}
+          disabled={isReordering}
+          className="space-y-3"
+          itemClassName="app-panel p-4 sm:p-5"
+          getItemLabel={(preset) => preset.name}
+          onReorder={(activeId, overId) => void handleReorder(activeId, overId)}
+          renderItem={(preset, dragHandle) => (editing === preset.id ? (
               <div className="space-y-3">
                 <input
                   type="text"
@@ -537,37 +569,40 @@ export default function AssistantPresetManager() {
             ) : (
               <div>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-xl text-slate-900">{preset.name}</h3>
-                    <p className="text-base text-slate-600 mt-1">Model: {preset.modelId}</p>
-                    <p className="text-sm text-slate-500 mt-1">
-                      API: {getRequestApiLabel(preset.requestApi)}
-                    </p>
-                    <p className="text-sm text-slate-500 mt-1">
-                      Request mode: {preset.useVercelServerProxy ? 'Vercel proxy' : 'Browser direct'}
-                    </p>
-                    {preset.apiConfigId && (
+                  <div className="flex min-w-0 flex-1 items-start gap-2">
+                    <div className="-ml-2 pt-0.5">{dragHandle}</div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-xl text-slate-900">{preset.name}</h3>
+                      <p className="text-base text-slate-600 mt-1">Model: {preset.modelId}</p>
                       <p className="text-sm text-slate-500 mt-1">
-                        Provider: {apiConfigs.find((config) => config.id === preset.apiConfigId)?.name || 'Unknown provider'}
+                        API: {getRequestApiLabel(preset.requestApi)}
                       </p>
-                    )}
-                    {preset.systemPrompt && (
-                      <p className="text-base text-slate-500 mt-1 line-clamp-2">
-                        {preset.systemPrompt}
+                      <p className="text-sm text-slate-500 mt-1">
+                        Request mode: {preset.useVercelServerProxy ? 'Vercel proxy' : 'Browser direct'}
                       </p>
-                    )}
-                    {Object.keys(preset.parameters).length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {Object.entries(preset.parameters).map(([key, value]) => (
-                          <span
-                            key={key}
-                            className="px-2.5 py-1 bg-blue-100 text-blue-700 text-sm rounded-md border border-blue-200 break-all"
-                          >
-                            {key}: {formatParameterValue(value)}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                      {preset.apiConfigId && (
+                        <p className="text-sm text-slate-500 mt-1">
+                          Provider: {apiConfigs.find((config) => config.id === preset.apiConfigId)?.name || 'Unknown provider'}
+                        </p>
+                      )}
+                      {preset.systemPrompt && (
+                        <p className="text-base text-slate-500 mt-1 line-clamp-2">
+                          {preset.systemPrompt}
+                        </p>
+                      )}
+                      {Object.keys(preset.parameters).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {Object.entries(preset.parameters).map(([key, value]) => (
+                            <span
+                              key={key}
+                              className="px-2.5 py-1 bg-blue-100 text-blue-700 text-sm rounded-md border border-blue-200 break-all"
+                            >
+                              {key}: {formatParameterValue(value)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2 self-start sm:self-start">
                     <button
@@ -615,9 +650,8 @@ export default function AssistantPresetManager() {
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-        ))}
+            ))}
+        />
 
         {editing && !presets.find(p => p.id === editing) && (
           <div

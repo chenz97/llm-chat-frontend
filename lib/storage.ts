@@ -1,6 +1,7 @@
 import type { ApiConfig, AssistantPreset, Conversation, ConversationSummary, ChatMessage, SettingsSyncConfig } from '@/types';
 import { indexConversation, matchesConversationIndex, summarizeConversation } from './conversationIndex';
 import type { ConversationIndexEntry } from './conversationIndex';
+import { sortByOrder } from './sortOrder';
 
 const STORAGE_KEYS = {
   API_CONFIGS: 'llm_chat_api_configs',
@@ -192,6 +193,10 @@ async function migrateApiConfigsToStore(store: IDBObjectStore): Promise<boolean>
 }
 
 export async function getApiConfigs(): Promise<ApiConfig[]> {
+  return sortByOrder(await loadApiConfigs());
+}
+
+async function loadApiConfigs(): Promise<ApiConfig[]> {
   const fallback = getFromStorage<ApiConfig[]>(STORAGE_KEYS.API_CONFIGS, []);
 
   if (!isIndexedDbAvailable()) return fallback;
@@ -416,6 +421,10 @@ function hasStore(db: IDBDatabase, storeName: string): boolean {
 }
 
 export async function getAssistantPresets(): Promise<AssistantPreset[]> {
+  return sortByOrder(await loadAssistantPresets());
+}
+
+async function loadAssistantPresets(): Promise<AssistantPreset[]> {
   const fallback = getFromStorage<AssistantPreset[]>(STORAGE_KEYS.ASSISTANT_PRESETS, []);
 
   if (!isIndexedDbAvailable()) return fallback;

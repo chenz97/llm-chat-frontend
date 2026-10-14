@@ -16,6 +16,7 @@ A local-first chat interface for OpenAI-compatible chat APIs. The app is built w
 - **Conversation Management**: Save, search, restore, edit, regenerate, and delete conversations with history
 - **Customizable Parameters**: Set model parameters like `temperature`, `max_tokens`, `top_p`, and provider-specific fields per preset
 - **Browser-Local Persistence**: IndexedDB is the primary storage layer, with `localStorage` fallback or migration for some settings data
+- **Custom Ordering**: Reorder API configurations and assistant presets by dragging the grip handle in Settings (mouse, touch, or keyboard); the order is saved locally and used by the chat selectors
 - **Settings Transfer**: Export and import API configurations and assistant presets as JSON
 - **Responsive Design**: A responsive light-theme interface that works on desktop and mobile
 

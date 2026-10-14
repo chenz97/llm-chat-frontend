@@ -84,6 +84,7 @@ export interface ApiConfig {
   apiKey: string;
   models: string[];
   createdAt: number;
+  sortOrder?: number; // User-defined list position; lower comes first
 }
 
 export interface ModelParameters {
@@ -106,6 +107,7 @@ export interface AssistantPreset {
   useVercelServerProxy?: boolean;
   isVisible?: boolean;
   createdAt: number;
+  sortOrder?: number; // User-defined list position; lower comes first
 }
 
 export interface TokenUsage {

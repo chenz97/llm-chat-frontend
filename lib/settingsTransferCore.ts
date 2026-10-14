@@ -16,6 +16,12 @@ const normalizeRequestApi = (value: unknown): RequestApi => (
   value === 'responses' ? 'responses' : 'chat_completions'
 );
 
+const readSortOrder = (record: Record<string, unknown>): { sortOrder?: number } => (
+  typeof record.sortOrder === 'number' && Number.isFinite(record.sortOrder)
+    ? { sortOrder: record.sortOrder }
+    : {}
+);
+
 const sanitizeApiConfigs = (rawConfigs: unknown): ApiConfig[] => {
   if (!Array.isArray(rawConfigs)) return [];
 
@@ -37,6 +43,7 @@ const sanitizeApiConfigs = (rawConfigs: unknown): ApiConfig[] => {
         apiKey: typeof config.apiKey === 'string' ? config.apiKey : '',
         models,
         createdAt: typeof config.createdAt === 'number' ? config.createdAt : Date.now(),
+        ...readSortOrder(config),
       };
     })
     .filter((config): config is ApiConfig => Boolean(config));
@@ -66,6 +73,7 @@ const sanitizeAssistantPresets = (rawPresets: unknown): AssistantPreset[] => {
       useVercelServerProxy: preset.useVercelServerProxy === true,
       isVisible: preset.isVisible !== false,
       createdAt: typeof preset.createdAt === 'number' ? preset.createdAt : Date.now(),
+      ...readSortOrder(preset),
     });
   }
 
