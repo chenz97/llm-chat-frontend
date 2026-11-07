@@ -6,6 +6,7 @@ A local-first chat interface for OpenAI-compatible chat APIs. The app is built w
 
 - **Multiple API Support**: Configure and manage multiple API endpoints with different base URLs, API keys, and model lists
 - **Assistant Presets**: Save reusable assistant configurations with custom system prompts, model parameters, optional provider binding, a per-preset Chat Completions vs Responses API selector, and an optional server-proxy toggle
+- **Web Search**: Enable OpenAI's built-in web search per assistant preset, with clickable source citations in replies
 - **Rich Message Support**:
   - Text messages with streaming responses
   - Phone-like voice mode for Chat Completions audio models, with microphone silence detection, visible call state, saved audio history, and per-message audio replay
@@ -109,8 +110,11 @@ Create reusable assistant configurations:
    - **Model**: Select from your configured models
    - **System Prompt**: Set the assistant's behavior
    - **Request API**: Choose `Chat Completions API` or `Responses API` for this preset
+   - **Enable OpenAI Web Search**: Allow the model to search the web when using `Responses API` with Base URL `https://api.openai.com/v1` or `https://api.openai.com/v1/responses`
    - **Send requests via Vercel server proxy**: When enabled, requests are sent to the app's `/api/chat/completions` route first and then forwarded server-side
    - **Parameters**: Add model parameters like temperature, max_tokens, etc.
+
+For example, select `Responses API`, enable `OpenAI Web Search`, and ask "What are today's main technology news stories?" Search citations appear as clickable links in the answer. The Web Search preference is included in settings exports and imports.
 
 ### Vercel Server-Side Proxy
 
@@ -235,4 +239,4 @@ MIT
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Run `npm test`, `npm run lint`, and `npm run build` before submitting a pull request. Use `npm run dev` to verify affected chat and settings flows manually, and include screenshots for UI changes. Keep commits focused and describe the behavior changed.

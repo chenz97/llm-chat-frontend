@@ -70,6 +70,7 @@ const sanitizeAssistantPresets = (rawPresets: unknown): AssistantPreset[] => {
       systemPrompt: typeof preset.systemPrompt === 'string' ? preset.systemPrompt : '',
       parameters: parameters as AssistantPreset['parameters'],
       requestApi: normalizeRequestApi(preset.requestApi),
+      enableWebSearch: preset.enableWebSearch === true,
       useVercelServerProxy: preset.useVercelServerProxy === true,
       isVisible: preset.isVisible !== false,
       createdAt: typeof preset.createdAt === 'number' ? preset.createdAt : Date.now(),

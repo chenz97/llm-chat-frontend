@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AudioRecord, ChatMessage } from '@/types';
 import { createAudioPlaybackBlob } from '@/lib/audioPlayback';
 import { getMessageImageUrls } from '@/lib/imageUtils';
+import { formatResponseCitations } from '@/lib/responseCitations';
 import MarkdownRenderer from './MarkdownRenderer';
 import ImageLightbox from './ImageLightbox';
 import {
@@ -48,6 +49,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
   const canRegenerate = !isSystem && !!onRegenerate;
   const assistantLabel = assistantName?.trim() || 'Assistant';
   const reasoning = message.reasoning?.trim() ? message.reasoning : '';
+  const displayContent = formatResponseCitations(message.content, message.urlCitations);
   const promptTokens = message.usage?.prompt_tokens;
   const reasoningTokens = message.usage?.reasoning_tokens;
   const completionTokens = message.usage?.completion_tokens;
@@ -135,7 +137,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
 
   const handleCopy = async () => {
     try {
-      await copyWithFallback(message.content);
+      await copyWithFallback(displayContent);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
@@ -144,12 +146,12 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
   };
 
   const handleStartEdit = () => {
-    setEditContent(message.content);
+    setEditContent(displayContent);
     setIsEditing(true);
   };
 
   const handleCancelEdit = () => {
-    setEditContent(message.content);
+    setEditContent(displayContent);
     setIsEditing(false);
   };
 
@@ -404,7 +406,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
                     </div>
                   )}
                   {message.content.trim() ? (
-                    <MarkdownRenderer content={message.content} />
+                    <MarkdownRenderer content={displayContent} />
                   ) : streamNotice || message.streamState === 'streaming' ? null : (
                     <div className="text-slate-400 text-sm">No content</div>
                   )}

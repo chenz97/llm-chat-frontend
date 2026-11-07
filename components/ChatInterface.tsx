@@ -15,6 +15,7 @@ import {
   RequestApi,
   ResponsesRequest,
   TokenUsage,
+  UrlCitation,
 } from '@/types';
 import {
   saveConversation,
@@ -1292,6 +1293,7 @@ export default function ChatInterface({
     let accumulatedReasoning = '';
     let latestUsage: TokenUsage | null = null;
     let responseId: string | undefined;
+    let urlCitations: UrlCitation[] | undefined;
     const diagnostics = createRawResponseCapture();
 
     const requestApi = normalizeRequestApi(resolvedPreset?.requestApi);
@@ -1367,6 +1369,7 @@ export default function ChatInterface({
         ? accumulatedReasoningDetails
         : undefined,
       responseId,
+      urlCitations,
       rawResponse: diagnostics.value(),
       usage: latestUsage || undefined,
       providerMetadata: accumulatedProviderMetadata,
@@ -1414,6 +1417,10 @@ export default function ChatInterface({
         resolvedApiConfig.apiKey,
         request,
         {
+          onCitations: (citations) => {
+            urlCitations = citations;
+            updateStreamingAssistant((message) => ({ ...message, urlCitations: citations }));
+          },
           onResponseId: (nextResponseId) => {
             responseId = nextResponseId;
             updateStreamingAssistant((message) => ({
@@ -1507,6 +1514,7 @@ export default function ChatInterface({
         {
           signal: abortControllerRef.current?.signal,
           requestApi,
+          enableWebSearch: resolvedPreset?.enableWebSearch === true,
           useVercelServerProxy: resolvedPreset?.useVercelServerProxy === true,
         }
       );
@@ -1666,7 +1674,7 @@ export default function ChatInterface({
     if (!conversation) return;
 
     const updatedMessages = messages.map((msg) =>
-      msg.id === id ? { ...msg, content: newContent } : msg
+      msg.id === id ? { ...msg, content: newContent, urlCitations: undefined } : msg
     );
 
     setMessages(updatedMessages);

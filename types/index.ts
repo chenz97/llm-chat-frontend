@@ -104,6 +104,7 @@ export interface AssistantPreset {
   systemPrompt: string;
   parameters: ModelParameters;
   requestApi?: RequestApi;
+  enableWebSearch?: boolean;
   useVercelServerProxy?: boolean;
   isVisible?: boolean;
   createdAt: number;
@@ -126,6 +127,7 @@ export interface ChatMessage {
   reasoning?: string;
   reasoningDetails?: ReasoningDetail[];
   responseId?: string;
+  urlCitations?: UrlCitation[];
   audioRecords?: AudioRecord[];
   imageUrls?: string[]; // For user uploaded images
   imageUrl?: string; // Legacy single-image fallback for older conversations
@@ -136,6 +138,13 @@ export interface ChatMessage {
   streamError?: string;
   timestamp: number;
   firstTokenTimestamp?: number;
+}
+
+export interface UrlCitation {
+  startIndex: number;
+  endIndex: number;
+  url: string;
+  title: string;
 }
 
 export interface Conversation {

@@ -8,9 +8,12 @@ import {
   RequestApi,
   ResponsesInputMessage,
   ResponsesRequest,
+  UrlCitation,
 } from '@/types';
 import { normalizeError } from '@/lib/errorUtils';
 import { getMessageImageUrls } from '@/lib/imageUtils';
+import { withOpenAIWebSearch } from '@/lib/webSearch';
+import { extractResponseCitations } from '@/lib/responseCitations';
 
 const VERCEL_PROXY_ENDPOINT = '/api/chat/completions';
 const DEFAULT_REQUEST_API: RequestApi = 'chat_completions';
@@ -18,6 +21,7 @@ const DEFAULT_REQUEST_API: RequestApi = 'chat_completions';
 export interface StreamOptions {
   signal?: AbortSignal;
   requestApi?: RequestApi;
+  enableWebSearch?: boolean;
   useVercelServerProxy?: boolean;
 }
 
@@ -26,6 +30,7 @@ export interface StreamCallbacks {
   onReasoning?: (chunk: string) => void;
   onReasoningDetails?: (details: ReasoningDetail[]) => void;
   onResponseId?: (responseId: string) => void;
+  onCitations?: (citations: UrlCitation[]) => void;
   onError: (error: Error) => void;
   onComplete: () => void;
   onUsage?: (usage: TokenUsage) => void;
@@ -500,6 +505,12 @@ export async function streamChatCompletion(
   try {
     const shouldUseServerProxy = options?.useVercelServerProxy === true;
     const requestApi = normalizeRequestApi(options?.requestApi);
+    const normalizedBaseUrl = baseUrl.trim();
+    const preparedRequest = withOpenAIWebSearch(request, {
+      baseUrl: normalizedBaseUrl,
+      requestApi,
+      enabled: options?.enableWebSearch,
+    });
 
     const response = shouldUseServerProxy
       ? await fetch(VERCEL_PROXY_ENDPOINT, {
@@ -508,24 +519,24 @@ export async function streamChatCompletion(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          baseUrl,
+          baseUrl: normalizedBaseUrl,
           apiKey,
           requestApi,
           request: {
-            ...request,
+            ...preparedRequest,
             stream: true,
           },
         }),
         signal: options?.signal,
       })
-      : await fetch(resolveApiEndpoint(baseUrl, requestApi), {
+      : await fetch(resolveApiEndpoint(normalizedBaseUrl, requestApi), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          ...request,
+          ...preparedRequest,
           stream: true,
         }),
         signal: options?.signal,
@@ -611,7 +622,14 @@ export async function streamChatCompletion(
                 callbacks.onResponseMetadata?.(metadata);
               }
 
-              if (asRecord(data)?.type === 'response.completed') {
+              if (
+                asRecord(data)?.type === 'response.completed'
+                || asRecord(data)?.type === 'response.incomplete'
+              ) {
+                const citations = extractResponseCitations(asRecord(data)?.response);
+                if (citations.length > 0) {
+                  callbacks.onCitations?.(citations);
+                }
                 onComplete();
                 return;
               }

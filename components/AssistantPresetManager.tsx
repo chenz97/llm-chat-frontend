@@ -163,6 +163,7 @@ export default function AssistantPresetManager() {
       systemPrompt: '',
       parameters: {},
       requestApi: 'chat_completions',
+      enableWebSearch: false,
       useVercelServerProxy: false,
       isVisible: true,
       createdAt: Date.now(),
@@ -186,6 +187,7 @@ export default function AssistantPresetManager() {
       systemPrompt: formData.systemPrompt || '',
       parameters: formData.parameters || {},
       requestApi: normalizeRequestApi(formData.requestApi),
+      enableWebSearch: formData.enableWebSearch === true,
       useVercelServerProxy: formData.useVercelServerProxy === true,
       isVisible: formData.isVisible !== false,
       createdAt: formData.createdAt || Date.now(),
@@ -460,6 +462,16 @@ export default function AssistantPresetManager() {
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"
+                    checked={formData.enableWebSearch === true}
+                    onChange={(e) => setFormData({ ...formData, enableWebSearch: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Enable OpenAI Web Search
+                </label>
+
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
                     checked={formData.useVercelServerProxy === true}
                     onChange={(e) => setFormData({ ...formData, useVercelServerProxy: e.target.checked })}
                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -577,6 +589,9 @@ export default function AssistantPresetManager() {
                       <p className="text-sm text-slate-500 mt-1">
                         API: {getRequestApiLabel(preset.requestApi)}
                       </p>
+                      {preset.enableWebSearch && (
+                        <p className="text-sm text-slate-500 mt-1">OpenAI Web Search: Enabled</p>
+                      )}
                       <p className="text-sm text-slate-500 mt-1">
                         Request mode: {preset.useVercelServerProxy ? 'Vercel proxy' : 'Browser direct'}
                       </p>
@@ -713,6 +728,16 @@ export default function AssistantPresetManager() {
                   ))}
                 </select>
               </div>
+
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={formData.enableWebSearch === true}
+                  onChange={(e) => setFormData({ ...formData, enableWebSearch: e.target.checked })}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                Enable OpenAI Web Search
+              </label>
 
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
