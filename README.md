@@ -6,7 +6,7 @@ A local-first chat interface for OpenAI-compatible chat APIs. The app is built w
 
 - **Multiple API Support**: Configure and manage multiple API endpoints with different base URLs, API keys, and model lists
 - **Assistant Presets**: Save reusable assistant configurations with custom system prompts, model parameters, optional provider binding, a per-preset Chat Completions vs Responses API selector, and an optional server-proxy toggle
-- **Web Search**: Enable OpenAI's built-in web search per assistant preset, with clickable source citations in replies
+- **Web Search**: Enable OpenAI's built-in web search per assistant preset, with live search activity, search terms, and clickable source citations in replies
 - **Rich Message Support**:
   - Text messages with streaming responses
   - Phone-like voice mode for Chat Completions audio models, with microphone silence detection, visible call state, saved audio history, and per-message audio replay
@@ -114,7 +114,7 @@ Create reusable assistant configurations:
    - **Send requests via Vercel server proxy**: When enabled, requests are sent to the app's `/api/chat/completions` route first and then forwarded server-side
    - **Parameters**: Add model parameters like temperature, max_tokens, etc.
 
-For example, select `Responses API`, enable `OpenAI Web Search`, and ask "What are today's main technology news stories?" Search citations appear as clickable links in the answer. The Web Search preference is included in settings exports and imports.
+For example, select `Responses API`, enable `OpenAI Web Search`, and ask "What are today's main technology news stories?" When the model searches, a Web Search panel shows its progress, available search terms, and page-reading activity above the answer. Search activity is saved with the conversation. Citations appear as clickable links, preserving source links already present in the answer. The Web Search preference is included in settings exports and imports.
 
 ### Vercel Server-Side Proxy
 

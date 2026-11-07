@@ -128,6 +128,7 @@ export interface ChatMessage {
   reasoningDetails?: ReasoningDetail[];
   responseId?: string;
   urlCitations?: UrlCitation[];
+  webSearchCalls?: WebSearchCall[];
   audioRecords?: AudioRecord[];
   imageUrls?: string[]; // For user uploaded images
   imageUrl?: string; // Legacy single-image fallback for older conversations
@@ -145,6 +146,15 @@ export interface UrlCitation {
   endIndex: number;
   url: string;
   title: string;
+}
+
+export interface WebSearchCall {
+  id: string;
+  status: 'in_progress' | 'searching' | 'completed' | 'failed' | 'stopped' | 'incomplete';
+  action?: 'search' | 'open_page' | 'find_in_page';
+  queries?: string[];
+  url?: string;
+  pattern?: string;
 }
 
 export interface Conversation {

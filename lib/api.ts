@@ -9,11 +9,13 @@ import {
   ResponsesInputMessage,
   ResponsesRequest,
   UrlCitation,
+  WebSearchCall,
 } from '@/types';
 import { normalizeError } from '@/lib/errorUtils';
 import { getMessageImageUrls } from '@/lib/imageUtils';
 import { withOpenAIWebSearch } from '@/lib/webSearch';
 import { extractResponseCitations } from '@/lib/responseCitations';
+import { updateWebSearchCalls } from '@/lib/webSearchActivity';
 
 const VERCEL_PROXY_ENDPOINT = '/api/chat/completions';
 const DEFAULT_REQUEST_API: RequestApi = 'chat_completions';
@@ -31,6 +33,7 @@ export interface StreamCallbacks {
   onReasoningDetails?: (details: ReasoningDetail[]) => void;
   onResponseId?: (responseId: string) => void;
   onCitations?: (citations: UrlCitation[]) => void;
+  onWebSearch?: (calls: WebSearchCall[]) => void;
   onError: (error: Error) => void;
   onComplete: () => void;
   onUsage?: (usage: TokenUsage) => void;
@@ -554,6 +557,7 @@ export async function streamChatCompletion(
 
     const decoder = new TextDecoder();
     let buffer = '';
+    let webSearchCalls: WebSearchCall[] = [];
 
     while (true) {
       const { done, value } = await reader.read();
@@ -586,6 +590,12 @@ export async function streamChatCompletion(
             const data: unknown = JSON.parse(jsonStr);
 
             if (requestApi === 'responses') {
+              const updatedSearchCalls = updateWebSearchCalls(webSearchCalls, data);
+              if (updatedSearchCalls !== webSearchCalls) {
+                webSearchCalls = updatedSearchCalls;
+                callbacks.onWebSearch?.(webSearchCalls);
+              }
+
               const responseId = extractResponsesResponseId(data);
               if (responseId) {
                 callbacks.onResponseId?.(responseId);

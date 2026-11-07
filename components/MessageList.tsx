@@ -13,9 +13,10 @@ interface MessageListProps {
   onEdit: (id: string, content: string) => void;
   onRegenerate: (id: string) => void;
   assistantName?: string;
+  streamingMessageId?: string;
 }
 
-export default function MessageList({ messages, scrollContainerRef, ...messageProps }: MessageListProps) {
+export default function MessageList({ messages, scrollContainerRef, streamingMessageId, ...messageProps }: MessageListProps) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const anchorRef = useRef<{ height: number; top: number } | null>(null);
   const hiddenCount = Math.max(0, messages.length - visibleCount);
@@ -45,7 +46,7 @@ export default function MessageList({ messages, scrollContainerRef, ...messagePr
         </button>
       )}
       {messages.slice(hiddenCount).map(message => (
-        <Message key={message.id} message={message} {...messageProps} />
+        <Message key={message.id} message={message} isStreaming={message.id === streamingMessageId} {...messageProps} />
       ))}
     </div>
   );

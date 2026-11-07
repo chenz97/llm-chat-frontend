@@ -16,6 +16,7 @@ import {
   ResponsesRequest,
   TokenUsage,
   UrlCitation,
+  WebSearchCall,
 } from '@/types';
 import {
   saveConversation,
@@ -38,6 +39,7 @@ import {
 import { parseChatDeepLinkAction } from '@/lib/chatDeepLink';
 import { arrayBufferToBase64, createAudioPlaybackBlob } from '@/lib/audioPlayback';
 import { createRawResponseCapture } from '@/lib/rawResponse';
+import { finishWebSearchCalls } from '@/lib/webSearchActivity';
 import {
   resolveSpeechDurationMs,
   resolveTrimmedFrameCount,
@@ -200,6 +202,7 @@ export default function ChatInterface({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const streamingMessagesRef = useRef<{ conversationId: string; messages: ChatMessage[]; updatedAt: number } | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const autoScrollEnabledRef = useRef(true);
   const previousConversationIdRef = useRef<string | null>(null);
@@ -257,8 +260,13 @@ export default function ChatInterface({
     };
 
     if (conversation) {
+      const hasActiveStream = streamingConversationIdRef.current === conversation.id && isStreamingRef.current;
       scheduleStateSync(() => {
-        setMessages(conversation.messages);
+        const liveMessages = streamingMessagesRef.current;
+        setMessages(liveMessages?.conversationId === conversation.id
+          && (hasActiveStream || liveMessages.updatedAt >= conversation.updatedAt)
+          ? liveMessages.messages
+          : conversation.messages);
       });
 
       const loadConfig = async () => {
@@ -998,17 +1006,20 @@ export default function ChatInterface({
     clearPersistQueue();
 
     if (conversation && streamingAssistantMessageIdRef.current) {
+      const liveMessages = streamingMessagesRef.current;
       const finalMessages = updateMessageById(
-        messagesRef.current,
+        liveMessages?.conversationId === conversation.id ? liveMessages.messages : messagesRef.current,
         streamingAssistantMessageIdRef.current,
         (message) => ({
           ...message,
           streamState: reason,
           streamError,
+          webSearchCalls: finishWebSearchCalls(message.webSearchCalls ?? [], reason === 'error' ? 'failed' : 'stopped'),
         })
       );
 
       messagesRef.current = finalMessages;
+      streamingMessagesRef.current = { conversationId: conversation.id, messages: finalMessages, updatedAt: Date.now() };
       if (activeConversationIdRef.current === conversation.id) {
         setMessages(finalMessages);
       }
@@ -1241,6 +1252,7 @@ export default function ChatInterface({
     };
 
     let streamMessages = [...baseMessages, assistantMessage];
+    streamingMessagesRef.current = { conversationId, messages: streamMessages, updatedAt: Date.now() };
     let firstTokenTimestamp: number | null = null;
 
     setIsLoading(true);
@@ -1294,6 +1306,7 @@ export default function ChatInterface({
     let latestUsage: TokenUsage | null = null;
     let responseId: string | undefined;
     let urlCitations: UrlCitation[] | undefined;
+    let webSearchCalls: WebSearchCall[] = [];
     const diagnostics = createRawResponseCapture();
 
     const requestApi = normalizeRequestApi(resolvedPreset?.requestApi);
@@ -1348,7 +1361,13 @@ export default function ChatInterface({
       : undefined;
 
     const updateStreamingAssistant = (updater: (message: ChatMessage) => ChatMessage) => {
-      streamMessages = updateMessageById(streamMessages, assistantMessageId, updater);
+      const liveMessages = streamingMessagesRef.current;
+      streamMessages = updateMessageById(
+        liveMessages?.conversationId === conversationId ? liveMessages.messages : streamMessages,
+        assistantMessageId,
+        updater
+      );
+      streamingMessagesRef.current = { conversationId, messages: streamMessages, updatedAt: Date.now() };
       messagesRef.current = streamMessages;
 
       if (activeConversationIdRef.current === conversationId) {
@@ -1370,12 +1389,15 @@ export default function ChatInterface({
         : undefined,
       responseId,
       urlCitations,
+      webSearchCalls: webSearchCalls.length > 0
+        ? finishWebSearchCalls(webSearchCalls, streamState === 'error' ? 'failed' : 'incomplete')
+        : undefined,
       rawResponse: diagnostics.value(),
       usage: latestUsage || undefined,
       providerMetadata: accumulatedProviderMetadata,
       ...(firstTokenTimestamp !== null ? { firstTokenTimestamp } : {}),
-      ...(streamState ? { streamState } : {}),
-      ...(streamError ? { streamError } : {}),
+      streamState,
+      streamError,
     });
 
     const finalizeStream = async (
@@ -1388,10 +1410,13 @@ export default function ChatInterface({
 
       clearPersistQueue();
 
-      const finalMessages = [
-        ...baseMessages,
-        finalAssistantMessage,
-      ];
+      const liveMessages = streamingMessagesRef.current;
+      const finalMessages = updateMessageById(
+        liveMessages?.conversationId === conversationId ? liveMessages.messages : streamMessages,
+        assistantMessageId,
+        () => finalAssistantMessage
+      );
+      streamingMessagesRef.current = { conversationId, messages: finalMessages, updatedAt: Date.now() };
       messagesRef.current = finalMessages;
 
       if (activeConversationIdRef.current === conversationId) {
@@ -1417,6 +1442,11 @@ export default function ChatInterface({
         resolvedApiConfig.apiKey,
         request,
         {
+          onWebSearch: (calls) => {
+            if (!isStreamingRef.current || streamingAssistantMessageIdRef.current !== assistantMessageId) return;
+            webSearchCalls = calls;
+            updateStreamingAssistant((message) => ({ ...message, webSearchCalls: calls }));
+          },
           onCitations: (citations) => {
             urlCitations = citations;
             updateStreamingAssistant((message) => ({ ...message, urlCitations: citations }));
@@ -1677,6 +1707,10 @@ export default function ChatInterface({
       msg.id === id ? { ...msg, content: newContent, urlCitations: undefined } : msg
     );
 
+    messagesRef.current = updatedMessages;
+    if (streamingMessagesRef.current?.conversationId === conversation.id) {
+      streamingMessagesRef.current = { conversationId: conversation.id, messages: updatedMessages, updatedAt: Date.now() };
+    }
     setMessages(updatedMessages);
 
     const updatedConversation: Conversation = {
@@ -1730,6 +1764,7 @@ export default function ChatInterface({
           onEdit={handleEditMessage}
           onRegenerate={handleRegenerate}
           assistantName={assistantPreset?.name}
+          streamingMessageId={isLoading ? messages[messages.length - 1]?.id : undefined}
         />
       </div>
 

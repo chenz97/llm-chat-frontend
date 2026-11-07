@@ -1,4 +1,42 @@
 import type { UrlCitation } from '@/types';
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+
+const sourceLinkParser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
+
+interface MarkdownNode {
+  type: string;
+  url?: string;
+  identifier?: string;
+  children?: MarkdownNode[];
+  position?: { start: { offset?: number }; end: { offset?: number } };
+}
+
+function existingSourceLinks(text: string): Array<{ url: string; start: number; end: number }> {
+  const nodes: MarkdownNode[] = [];
+  const visit = (node: MarkdownNode) => {
+    nodes.push(node);
+    node.children?.forEach(visit);
+  };
+  visit(sourceLinkParser.parse(text));
+  const definitions = new Map(nodes.filter((node) => node.type === 'definition')
+    .map((node) => [node.identifier?.toLowerCase(), node.url]));
+
+  return nodes.flatMap((node) => {
+    const url = node.type === 'link' ? node.url : node.type === 'linkReference'
+      ? definitions.get(node.identifier?.toLowerCase()) : undefined;
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (!url || start === undefined || end === undefined) return [];
+    try {
+      return [{ url: new URL(url).href, start, end }];
+    } catch {
+      return [];
+    }
+  });
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -46,6 +84,8 @@ export function extractResponseCitations(response: unknown): UrlCitation[] {
 }
 
 export function formatResponseCitations(text: string, citations: UrlCitation[] = []): string {
+  if (citations.length === 0) return text;
+  const existingLinks = existingSourceLinks(text);
   let result = '';
   let cursor = 0;
   let citationNumber = 0;
@@ -72,6 +112,20 @@ export function formatResponseCitations(text: string, citations: UrlCitation[] =
     const title = citation.title.replace(/\s+/g, ' ').replace(/["\\]/g, '\\$&');
     const original = text.slice(citation.startIndex, citation.endIndex);
     const label = original.replace(/\uE200cite\uE202[\s\S]*?\uE201/g, '');
+    const hasExistingLink = existingLinks.some((existing) => {
+      if (existing.url !== url.href) return false;
+      const gap = existing.end < citation.startIndex
+        ? text.slice(existing.end, citation.startIndex)
+        : citation.endIndex < existing.start ? text.slice(citation.endIndex, existing.start) : '';
+      return /^[\s()[\],.;:]*$/.test(gap);
+    });
+    if (hasExistingLink) {
+      if (!sharesRange) result += text.slice(cursor, citation.startIndex) + label;
+      cursor = citation.endIndex;
+      previousStart = citation.startIndex;
+      previousEnd = citation.endIndex;
+      continue;
+    }
     citationNumber += 1;
     const link = `[[${citationNumber}]](<${href}>${title ? ` "${title}"` : ''})`;
     if (sharesRange) {

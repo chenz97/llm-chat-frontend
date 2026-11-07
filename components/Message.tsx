@@ -5,6 +5,8 @@ import { AudioRecord, ChatMessage } from '@/types';
 import { createAudioPlaybackBlob } from '@/lib/audioPlayback';
 import { getMessageImageUrls } from '@/lib/imageUtils';
 import { formatResponseCitations } from '@/lib/responseCitations';
+import { finishWebSearchCalls } from '@/lib/webSearchActivity';
+import WebSearchActivity from './WebSearchActivity';
 import MarkdownRenderer from './MarkdownRenderer';
 import ImageLightbox from './ImageLightbox';
 import {
@@ -30,9 +32,10 @@ interface MessageProps {
   onEdit?: (id: string, newContent: string) => void;
   onRegenerate?: (id: string) => void;
   assistantName?: string;
+  isStreaming?: boolean;
 }
 
-export default function Message({ message, onEdit, onRegenerate, assistantName }: MessageProps) {
+export default function Message({ message, onEdit, onRegenerate, assistantName, isStreaming = false }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [copied, setCopied] = useState(false);
@@ -50,6 +53,10 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
   const assistantLabel = assistantName?.trim() || 'Assistant';
   const reasoning = message.reasoning?.trim() ? message.reasoning : '';
   const displayContent = formatResponseCitations(message.content, message.urlCitations);
+  const webSearchCalls = isStreaming ? message.webSearchCalls ?? [] : finishWebSearchCalls(
+    message.webSearchCalls ?? [],
+    message.streamState === 'error' ? 'failed' : message.streamState === 'stopped' ? 'stopped' : 'incomplete'
+  );
   const promptTokens = message.usage?.prompt_tokens;
   const reasoningTokens = message.usage?.reasoning_tokens;
   const completionTokens = message.usage?.completion_tokens;
@@ -252,7 +259,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
                     >
                       {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                     </button>
-                    {onEdit && (
+                    {onEdit && !isStreaming && (
                       <button
                         onClick={handleStartEdit}
                         className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
@@ -388,6 +395,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
                 <div className="whitespace-pre-wrap">{message.content}</div>
               ) : (
                 <div className="space-y-3">
+                  {webSearchCalls.length > 0 && <WebSearchActivity calls={webSearchCalls} />}
                   {reasoning && (
                     <div className="rounded-lg border border-slate-300 bg-slate-100">
                       <div className="border-b border-slate-300 px-3 py-2 text-xs font-medium tracking-wide text-slate-950">
@@ -407,7 +415,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName }
                   )}
                   {message.content.trim() ? (
                     <MarkdownRenderer content={displayContent} />
-                  ) : streamNotice || message.streamState === 'streaming' ? null : (
+                  ) : streamNotice || isStreaming || webSearchCalls.length > 0 ? null : (
                     <div className="text-slate-400 text-sm">No content</div>
                   )}
                   {streamNotice && (
