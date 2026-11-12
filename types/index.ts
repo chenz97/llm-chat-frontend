@@ -180,8 +180,8 @@ export interface SettingsExport {
 
 export interface SettingsSyncConfig {
   githubToken: string;
-  gistId: string;
-  filename: string;
+  repository: string;
+  path: string;
 }
 
 export interface NormalizedSettingsImport {

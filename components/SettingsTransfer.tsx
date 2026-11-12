@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { CloudDownload, CloudUpload, Download, Save, Upload } from 'lucide-react';
+import { CloudDownload, CloudUpload, Download, Save, ShieldAlert, Upload } from 'lucide-react';
 import type { SettingsExport, SettingsSyncConfig } from '@/types';
-import { pullSettingsFromGist, pushSettingsToGist } from '@/lib/githubGistSync';
+import { pullSettingsFromRepo, pushSettingsToRepo } from '@/lib/githubRepoSync';
+import { MIN_PASSPHRASE_LENGTH } from '@/lib/settingsCrypto';
 import { showFloatingStatus } from '@/lib/floatingStatus';
 import { normalizeSettingsSyncConfig } from '@/lib/settingsSyncConfig';
 import {
+  getLegacyGistId,
   getSettingsSyncConfig,
   setSettingsSyncConfig,
 } from '@/lib/storage';
@@ -42,14 +44,18 @@ export default function SettingsTransfer() {
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const [syncConfig, setSyncConfig] = useState<SettingsSyncConfig>({
     githubToken: '',
-    gistId: '',
-    filename: DEFAULT_SETTINGS_SYNC_FILENAME,
+    repository: '',
+    path: DEFAULT_SETTINGS_SYNC_FILENAME,
   });
+  // The passphrase is intentionally kept only in memory and never persisted.
+  const [passphrase, setPassphrase] = useState('');
+  const [legacyGistId, setLegacyGistId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setSyncConfig(getSettingsSyncConfig());
+      setLegacyGistId(getLegacyGistId());
     }, 0);
 
     return () => {
@@ -119,7 +125,9 @@ export default function SettingsTransfer() {
   const saveSyncConfig = (nextConfig: SettingsSyncConfig): boolean => {
     const normalized = normalizeSettingsSyncConfig(nextConfig);
     setSyncConfig(normalized);
-    return setSettingsSyncConfig(normalized);
+    const didSave = setSettingsSyncConfig(normalized);
+    if (didSave) setLegacyGistId(null);
+    return didSave;
   };
 
   const handleSyncConfigChange = (field: keyof SettingsSyncConfig, value: string) => {
@@ -146,27 +154,20 @@ export default function SettingsTransfer() {
     try {
       const savedConfig = normalizeSettingsSyncConfig(syncConfig);
       const settings = await buildExportData();
-      const result = await pushSettingsToGist({
+      const result = await pushSettingsToRepo({
         token: savedConfig.githubToken,
-        gistId: savedConfig.gistId,
-        filename: savedConfig.filename,
+        repository: savedConfig.repository,
+        path: savedConfig.path,
+        passphrase,
         settings,
       });
-      const nextConfig = {
-        ...savedConfig,
-        gistId: result.gistId,
-      };
-
-      const didSave = saveSyncConfig(nextConfig);
-      if (!didSave) {
-        throw new Error('Settings synced, but the returned Gist ID could not be saved locally.');
-      }
+      saveSyncConfig(savedConfig);
 
       showStatus({
         kind: 'success',
         message: result.didCreate
-          ? `Created private Gist ${result.gistId} and synced settings.`
-          : 'Settings synced to GitHub Gist.',
+          ? `Created encrypted ${savedConfig.path} in ${savedConfig.repository}.`
+          : `Encrypted settings synced to ${savedConfig.repository}.`,
       });
     } catch (error) {
       console.error('Failed to sync settings to GitHub:', error);
@@ -193,10 +194,11 @@ export default function SettingsTransfer() {
       const savedConfig = normalizeSettingsSyncConfig(syncConfig);
       saveSyncConfig(savedConfig);
 
-      const parsed = await pullSettingsFromGist({
+      const parsed = await pullSettingsFromRepo({
         token: savedConfig.githubToken,
-        gistId: savedConfig.gistId,
-        filename: savedConfig.filename,
+        repository: savedConfig.repository,
+        path: savedConfig.path,
+        passphrase,
       });
       const normalized = normalizeImportData(parsed);
 
@@ -262,11 +264,23 @@ export default function SettingsTransfer() {
 
       <div className="app-panel p-4 sm:p-5 space-y-3">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">GitHub Gist Sync</h3>
+          <h3 className="text-lg font-semibold text-slate-900">Encrypted GitHub Sync</h3>
           <p className="text-sm text-slate-600">
-            Store the same settings JSON in a private GitHub Gist and manually sync it back to this browser.
+            Settings are encrypted in this browser (AES-256-GCM, passphrase-derived key) and stored as a file in a
+            private GitHub repository. GitHub only ever sees ciphertext.
           </p>
         </div>
+
+        {legacyGistId && (
+          <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <ShieldAlert className="w-4 h-4 shrink-0" />
+            <span>
+              Gist sync has been removed because secret Gists are readable by anyone with the link and stored API keys
+              in plaintext. Delete Gist <code>{legacyGistId}</code> on GitHub, revoke its token, and rotate any API keys
+              it contained. Then configure a private repository below.
+            </span>
+          </div>
+        )}
 
         <div className="grid gap-3">
           <label className="grid gap-1 text-sm font-medium text-slate-700">
@@ -275,27 +289,39 @@ export default function SettingsTransfer() {
               type="password"
               value={syncConfig.githubToken}
               onChange={(event) => handleSyncConfigChange('githubToken', event.target.value)}
-              placeholder="Token with Gist access"
+              placeholder="Fine-grained token: this repo only, Contents read/write"
+              autoComplete="off"
               className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
             />
           </label>
           <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Gist ID
+            Private Repository
             <input
               type="text"
-              value={syncConfig.gistId}
-              onChange={(event) => handleSyncConfigChange('gistId', event.target.value)}
-              placeholder="Leave empty to create a private Gist on first sync"
+              value={syncConfig.repository}
+              onChange={(event) => handleSyncConfigChange('repository', event.target.value)}
+              placeholder="owner/repo"
               className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
             />
           </label>
           <label className="grid gap-1 text-sm font-medium text-slate-700">
-            Filename
+            File Path
             <input
               type="text"
-              value={syncConfig.filename}
-              onChange={(event) => handleSyncConfigChange('filename', event.target.value)}
+              value={syncConfig.path}
+              onChange={(event) => handleSyncConfigChange('path', event.target.value)}
               placeholder={DEFAULT_SETTINGS_SYNC_FILENAME}
+              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+            />
+          </label>
+          <label className="grid gap-1 text-sm font-medium text-slate-700">
+            Encryption Passphrase
+            <input
+              type="password"
+              value={passphrase}
+              onChange={(event) => setPassphrase(event.target.value)}
+              placeholder={`At least ${MIN_PASSPHRASE_LENGTH} characters; never saved`}
+              autoComplete="new-password"
               className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
             />
           </label>
@@ -329,7 +355,8 @@ export default function SettingsTransfer() {
         </div>
 
         <p className="text-xs text-slate-500">
-          The token is stored only in this browser and is not included in exported settings JSON.
+          The token is stored only in this browser and is not included in exported settings JSON. The passphrase is
+          never stored; if you lose it, the synced file cannot be recovered. Sync refuses to use a public repository.
         </p>
       </div>
 

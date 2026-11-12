@@ -13,7 +13,7 @@ The current implementation is centered on practical experimentation with differe
 - Read streamed assistant output with markdown, code highlighting, math rendering, token usage, reasoning text, and optional bounded SSE diagnostic inspection.
 - Regenerate or edit messages while keeping the conversation history in local browser storage.
 - Export and import API settings and assistant presets as JSON backups.
-- Manually sync API settings and assistant presets through a user-configured private GitHub Gist.
+- Manually sync API settings and assistant presets through an end-to-end encrypted file in a user-configured private GitHub repository.
 
 ## Functional Scope
 
@@ -29,7 +29,7 @@ The codebase currently implements the following stable product scope:
 - Markdown rendering with GitHub Flavored Markdown, KaTeX math, and syntax highlighting.
 - A server-side forwarding route at `/api/chat/completions` for deployments where browser-to-provider requests are undesirable.
 - JSON import/export for API configurations and assistant presets.
-- Manual GitHub Gist sync for the same settings JSON envelope, including push-to-cloud and pull-from-cloud overwrite flows.
+- Manual encrypted GitHub repository sync for the same settings JSON envelope, including push-to-cloud and pull-from-cloud overwrite flows.
 - A local Python helper script for reproducing raw chat-completions requests outside the browser.
 
 ## Constraints And Assumptions
@@ -41,7 +41,7 @@ The codebase currently implements the following stable product scope:
 - Provider-specific extensions such as reasoning fields and detailed usage tokens are handled on a best-effort basis rather than through vendor SDKs.
 - Mobile browsers may suspend or terminate in-flight streaming requests when the page enters the background or the device is locked. The app mitigates this by preserving partial output, but it does not guarantee uninterrupted background streaming.
 - API keys are entered in the browser UI and stored locally in the browser. When the optional Vercel proxy path is used, the browser still sends the saved API key to the application server for forwarding.
-- GitHub Gist sync uses a browser-stored GitHub token and direct GitHub REST API calls; the token is not included in settings export files.
+- Encrypted GitHub sync uses a browser-stored fine-grained GitHub token and direct GitHub REST API calls; the token is not included in settings export files, and the encryption passphrase is never stored.
 - Automated coverage is currently limited to focused Node tests for settings transfer, deep links, sync helpers, and audio request construction. An isolated Chrome regression script covers conversation indexing and memory behavior. Broader microphone and chat-flow validation still relies on build, lint, and manual/browser checks.
 
 ## Non-Goals

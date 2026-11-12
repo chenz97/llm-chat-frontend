@@ -43,7 +43,7 @@ The page composes four major UI areas:
 
 - `components/ApiConfigManager.tsx`: CRUD UI for provider records.
 - `components/AssistantPresetManager.tsx`: CRUD UI for reusable assistant presets, including default-preset selection, provider-scoped model filtering, per-preset request API selection, and per-preset main-selector visibility.
-- `components/SettingsTransfer.tsx`: JSON import/export and manual GitHub Gist sync for API configs, presets, and the default preset pointer.
+- `components/SettingsTransfer.tsx`: JSON import/export and manual end-to-end encrypted GitHub private-repository sync for API configs, presets, and the default preset pointer.
 
 Settings screens communicate updates to the rest of the app through browser events such as `settingsUpdated` and `assistantPresetsMigrated`.
 
@@ -51,8 +51,9 @@ Settings transfer logic is split so the UI can share validation and remote-sync 
 
 - `lib/settingsTransferCore.ts`: versioned settings import normalization and the shared settings transfer constants.
 - `lib/settingsTransfer.ts`: storage-backed settings export construction and normalized import persistence.
-- `lib/githubGistSync.ts`: direct GitHub REST API calls for creating, updating, and reading the configured Gist file.
-- `lib/settingsSyncConfig.ts`: local sync configuration normalization shared by the Gist sync UI.
+- `lib/settingsCrypto.ts`: browser-side AES-256-GCM encryption of the settings payload with a PBKDF2-SHA-256 (600k iterations) passphrase-derived key.
+- `lib/githubRepoSync.ts`: GitHub Contents API calls that verify the target repository is private, then create, update, or read the encrypted settings file.
+- `lib/settingsSyncConfig.ts`: local sync configuration normalization shared by the encrypted sync UI.
 - `lib/floatingStatus.ts` and `components/FloatingStatus.tsx`: browser event and UI surface for floating success or error notifications inside the settings modal.
 
 `components/SettingsModal.tsx` listens for floating status events so nested settings tabs can report operation outcomes without each tab owning its own overlay lifecycle.
@@ -76,7 +77,7 @@ The `meta` store keeps small singleton values such as:
 - `current_conversation_id`
 - `default_preset_id`
 
-GitHub Gist sync configuration is intentionally kept in `localStorage` under `llm_chat_settings_sync_config` rather than IndexedDB because it is a small browser-local integration preference. It contains the GitHub token, Gist ID, and target filename; it is not part of the settings export envelope.
+Encrypted GitHub sync configuration is intentionally kept in `localStorage` under `llm_chat_settings_sync_config` rather than IndexedDB because it is a small browser-local integration preference. It contains the GitHub token, repository (`owner/repo`), and file path (the encryption passphrase is never persisted); it is not part of the settings export envelope.
 
 Fallback behavior:
 

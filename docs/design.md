@@ -12,7 +12,7 @@ Stable persisted entities:
 - `ChatMessage`: individual message record with `role`, `content`, optional `audioRecords`, optional `imageUrls`, legacy optional `imageUrl`, optional reasoning fields, optional Responses `responseId`, optional usage, optional raw response, and timestamps.
 - `AudioRecord`: saved audio payload with role, MIME type, OpenAI-supported format, base64 data, optional duration, optional provider audio ID, and creation time.
 - `SettingsExport`: portable JSON envelope for settings backup and restore.
-- `SettingsSyncConfig`: local-only GitHub Gist sync preference containing the browser-stored token, Gist ID, and target filename.
+- `SettingsSyncConfig`: local-only encrypted GitHub sync preference containing the browser-stored token, private repository, and file path.
 
 The request-side OpenAI compatibility layer is also defined here through `Message`, `MessageContent`, `ChatCompletionRequest`, `ResponsesRequest`, `ReasoningDetail`, `TokenUsage`, and `ProviderMetadata`.
 
@@ -134,14 +134,16 @@ Important design limitation:
 
 This design favors successful partial recovery over hard failure when an import file contains stale provider references.
 
-`components/SettingsTransfer.tsx` uses the same contract for local JSON import/export and GitHub Gist sync. `lib/settingsTransfer.ts` builds the storage-backed export payload and persists normalized imports, while `lib/githubGistSync.ts` handles the direct GitHub API integration.
+`components/SettingsTransfer.tsx` uses the same contract for local JSON import/export and encrypted GitHub sync. `lib/settingsTransfer.ts` builds the storage-backed export payload and persists normalized imports, while `lib/settingsCrypto.ts` encrypts the payload and `lib/githubRepoSync.ts` handles the GitHub API integration.
 
-GitHub Gist sync behavior:
+Encrypted GitHub sync behavior (replaces the former Gist sync, which stored API keys in plaintext in secret Gists readable by anyone with the URL):
 
-- default filename is `llm-chat-settings.json`,
-- pushing with no configured Gist ID creates a private Gist and stores the returned ID locally,
-- pushing with a configured Gist ID patches that Gist file,
-- pulling reads the configured file, parses JSON, normalizes it through the same import contract, and overwrites local settings after user confirmation,
+- default file path is `llm-chat-settings.enc.json`,
+- the settings export is encrypted in the browser with AES-256-GCM; the key is derived from a user passphrase via PBKDF2-SHA-256 (600,000 iterations, random 16-byte salt, random 12-byte IV per push),
+- the passphrase is held only in component memory and never persisted or sent anywhere,
+- every push and pull first reads the repository metadata and refuses to continue unless GitHub reports it as private,
+- pushing creates the file or updates it using the current blob SHA,
+- pulling reads the file, rejects anything that is not an encrypted envelope, decrypts it, normalizes it through the same import contract, and overwrites local settings after user confirmation,
 - sync configuration is saved separately from settings export data so GitHub tokens are never included in backup JSON,
 - settings transfer operations emit floating success or error notifications, and provider/preset changes emit local-result notifications without prompting for cloud sync.
 

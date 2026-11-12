@@ -909,23 +909,35 @@ export async function setCurrentConversationId(id: string | null): Promise<void>
   }
 }
 
+const DEFAULT_SYNC_PATH = 'llm-chat-settings.enc.json';
+
+type StoredSettingsSyncConfig = Partial<SettingsSyncConfig> & { gistId?: unknown };
+
 export function getSettingsSyncConfig(): SettingsSyncConfig {
-  const stored = getFromStorage<Partial<SettingsSyncConfig>>(STORAGE_KEYS.SETTINGS_SYNC_CONFIG, {});
+  const stored = getFromStorage<StoredSettingsSyncConfig>(STORAGE_KEYS.SETTINGS_SYNC_CONFIG, {});
+  // Legacy Gist configs used a broadly scoped token; do not reuse it for repo sync.
+  const isLegacy = typeof stored.repository !== 'string';
 
   return {
-    githubToken: typeof stored.githubToken === 'string' ? stored.githubToken : '',
-    gistId: typeof stored.gistId === 'string' ? stored.gistId : '',
-    filename: typeof stored.filename === 'string' && stored.filename.trim()
-      ? stored.filename
-      : 'llm-chat-settings.json',
+    githubToken: !isLegacy && typeof stored.githubToken === 'string' ? stored.githubToken : '',
+    repository: !isLegacy ? stored.repository ?? '' : '',
+    path: typeof stored.path === 'string' && stored.path.trim()
+      ? stored.path
+      : DEFAULT_SYNC_PATH,
   };
+}
+
+// Returns the Gist ID left over from the old (insecure) Gist sync, if any.
+export function getLegacyGistId(): string | null {
+  const stored = getFromStorage<StoredSettingsSyncConfig>(STORAGE_KEYS.SETTINGS_SYNC_CONFIG, {});
+  return typeof stored.gistId === 'string' && stored.gistId.trim() ? stored.gistId.trim() : null;
 }
 
 export function setSettingsSyncConfig(config: SettingsSyncConfig): boolean {
   return saveToStorage(STORAGE_KEYS.SETTINGS_SYNC_CONFIG, {
     githubToken: config.githubToken,
-    gistId: config.gistId,
-    filename: config.filename.trim() || 'llm-chat-settings.json',
+    repository: config.repository,
+    path: config.path.trim() || DEFAULT_SYNC_PATH,
   });
 }
 

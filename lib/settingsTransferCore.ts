@@ -6,7 +6,7 @@ import type {
 } from '@/types';
 
 export const SETTINGS_UPDATED_EVENT = 'settingsUpdated';
-export const DEFAULT_SETTINGS_SYNC_FILENAME = 'llm-chat-settings.json';
+export const DEFAULT_SETTINGS_SYNC_FILENAME = 'llm-chat-settings.enc.json';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)

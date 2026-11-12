@@ -15,7 +15,7 @@ The repository is currently in a local-first MVP hardening phase. The primary en
 - Stream interruption hardening so network failures and mobile backgrounding preserve partial assistant output instead of replacing it.
 - Multi-image upload and paste support for multimodal prompts, with legacy single-image conversation compatibility.
 - Settings import/export and a raw request debugging script.
-- Manual GitHub Gist settings sync from the Import/Export settings page.
+- Manual end-to-end encrypted settings sync to a private GitHub repository from the Import/Export settings page.
 - URL deep-link prompt fill and autosend support for command-driven browser launch workflows.
 - Chat Completions audio call mode with browser VAD speech segmentation, RMS/`MediaRecorder` fallback, visible call states, prior user-audio context, assistant text context, and per-message audio replay controls.
 - Conversation memory hardening: metadata/search index, bounded diagnostics without duplicate audio, serialized partial saves, paged message rendering, and playback cleanup.

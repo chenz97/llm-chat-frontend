@@ -19,6 +19,7 @@ A local-first chat interface for OpenAI-compatible chat APIs. The app is built w
 - **Browser-Local Persistence**: IndexedDB is the primary storage layer, with `localStorage` fallback or migration for some settings data
 - **Custom Ordering**: Reorder API configurations and assistant presets by dragging the grip handle in Settings (mouse, touch, or keyboard); the order is saved locally and used by the chat selectors
 - **Settings Transfer**: Export and import API configurations and assistant presets as JSON
+- **Encrypted Cloud Sync**: Sync settings to a private GitHub repository; the file is encrypted in the browser (AES-256-GCM) with a passphrase that is never stored
 - **Responsive Design**: A responsive light-theme interface that works on desktop and mobile
 
 ## Getting Started
@@ -131,6 +132,16 @@ Notes:
 2. Select your API configuration and optionally an assistant preset
 3. Type your message or upload an image
 4. Press Enter or click Send, or click the phone button to start voice-call mode with a compatible Chat Completions audio model
+
+### Encrypted Settings Sync
+
+Settings (API configs, presets, default preset) can be synced across browsers through a file in a **private** GitHub repository. The file is encrypted in the browser with AES-256-GCM, using a key derived from your passphrase (PBKDF2-SHA-256, 600k iterations), so GitHub only stores ciphertext.
+
+1. Create a private repository, e.g. `you/llm-chat-sync`.
+2. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) scoped to **only that repository** with **Contents: Read and write**.
+3. Open Settings → Import/Export, enter the token, `owner/repo`, file path (default `llm-chat-settings.enc.json`) and a passphrase (12+ chars), then click **Sync to GitHub**. Use **Sync from GitHub** with the same passphrase on other browsers.
+
+The passphrase is never saved; if you lose it, the synced file can't be decrypted. Sync refuses to run against a public repository. The old GitHub Gist sync has been removed. If you used it, delete that Gist, revoke its token, and rotate the API keys it contained.
 
 ### Voice Call Mode
 

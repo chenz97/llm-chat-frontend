@@ -5,6 +5,6 @@ export const normalizeSettingsSyncConfig = (
   config: SettingsSyncConfig
 ): SettingsSyncConfig => ({
   githubToken: config.githubToken.trim(),
-  gistId: config.gistId.trim(),
-  filename: config.filename.trim() || DEFAULT_SETTINGS_SYNC_FILENAME,
+  repository: config.repository.trim(),
+  path: config.path.trim().replace(/^\/+/, '') || DEFAULT_SETTINGS_SYNC_FILENAME,
 });
