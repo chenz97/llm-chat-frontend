@@ -6,7 +6,7 @@ A local-first chat interface for OpenAI-compatible chat APIs. The app is built w
 
 - **Multiple API Support**: Configure and manage multiple API endpoints with different base URLs, API keys, and model lists
 - **Assistant Presets**: Save reusable assistant configurations with custom system prompts, model parameters, optional provider binding, a per-preset Chat Completions vs Responses API selector, and an optional server-proxy toggle
-- **Web Search**: Enable OpenAI's built-in web search per assistant preset, with live search activity, search terms, and clickable source citations in replies
+- **Web Search**: Enable OpenAI or OpenRouter web search per assistant preset, with live search activity, search terms, and clickable source citations in replies
 - **Rich Message Support**:
   - Text messages with streaming responses
   - Phone-like voice mode for Chat Completions audio models, with microphone silence detection, visible call state, saved audio history, and per-message audio replay
@@ -26,7 +26,7 @@ A local-first chat interface for OpenAI-compatible chat APIs. The app is built w
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 22.6+ and npm
 
 ### Installation
 
@@ -111,11 +111,15 @@ Create reusable assistant configurations:
    - **Model**: Select from your configured models
    - **System Prompt**: Set the assistant's behavior
    - **Request API**: Choose `Chat Completions API` or `Responses API` for this preset
-   - **Enable OpenAI Web Search**: Allow the model to search the web when using `Responses API` with Base URL `https://api.openai.com/v1` or `https://api.openai.com/v1/responses`
+   - **Enable Web Search**: Allow the model to search the web when using `Responses API` with an OpenAI or OpenRouter API configuration
    - **Send requests via Vercel server proxy**: When enabled, requests are sent to the app's `/api/chat/completions` route first and then forwarded server-side
    - **Parameters**: Add model parameters like temperature, max_tokens, etc.
 
-For example, select `Responses API`, enable `OpenAI Web Search`, and ask "What are today's main technology news stories?" When the model searches, a Web Search panel shows its progress, available search terms, and page-reading activity above the answer. Search activity is saved with the conversation. Citations appear as clickable links, preserving source links already present in the answer. The Web Search preference is included in settings exports and imports.
+For example, use Base URL `https://openrouter.ai/api/v1` with model `openai/gpt-5.2`, select `Responses API`, enable `Web Search`, and ask "What are today's main technology news stories?" OpenAI configurations use `https://api.openai.com/v1`. Both providers also accept the full `/responses` endpoint as the Base URL. The app selects `openrouter:web_search` for OpenRouter and `web_search` for OpenAI. See the [OpenRouter Web Search documentation](https://openrouter.ai/docs/guides/features/server-tools/web-search) for supported search parameters.
+
+When the model searches, a Web Search panel shows the progress, search terms, and page-reading activity supplied by the provider above the answer. Search activity is saved with the conversation. Citations appear as clickable links, preserving source links already present in the answer. The Web Search preference is included in settings exports and imports and works with direct requests and the Vercel server proxy.
+
+To customize OpenRouter search, add a `tools` array in Model Parameters, for example `[{ "type": "openrouter:web_search", "parameters": { "engine": "exa", "max_results": 3 } }]`. The app preserves that tool's configuration and any other tools in the array.
 
 ### Vercel Server-Side Proxy
 

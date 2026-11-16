@@ -13,7 +13,7 @@ import {
 } from '@/types';
 import { normalizeError } from '@/lib/errorUtils';
 import { getMessageImageUrls } from '@/lib/imageUtils';
-import { withOpenAIWebSearch } from '@/lib/webSearch';
+import { withWebSearch } from '@/lib/webSearch';
 import { extractResponseCitations } from '@/lib/responseCitations';
 import { updateWebSearchCalls } from '@/lib/webSearchActivity';
 
@@ -509,7 +509,7 @@ export async function streamChatCompletion(
     const shouldUseServerProxy = options?.useVercelServerProxy === true;
     const requestApi = normalizeRequestApi(options?.requestApi);
     const normalizedBaseUrl = baseUrl.trim();
-    const preparedRequest = withOpenAIWebSearch(request, {
+    const preparedRequest = withWebSearch(request, {
       baseUrl: normalizedBaseUrl,
       requestApi,
       enabled: options?.enableWebSearch,

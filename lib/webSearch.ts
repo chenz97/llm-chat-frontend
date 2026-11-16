@@ -6,7 +6,7 @@ interface WebSearchOptions {
   enabled?: boolean;
 }
 
-export function withOpenAIWebSearch<T extends Record<string, unknown>>(
+export function withWebSearch<T extends Record<string, unknown>>(
   request: T,
   { baseUrl, requestApi, enabled }: WebSearchOptions
 ): T {
@@ -14,14 +14,19 @@ export function withOpenAIWebSearch<T extends Record<string, unknown>>(
     return request;
   }
 
+  let toolType: 'web_search' | 'openrouter:web_search';
   try {
     const url = new URL(baseUrl);
     const path = url.pathname.replace(/\/$/, '');
-    if (
-      url.origin !== 'https://api.openai.com'
-      || (path !== '/v1' && path !== '/v1/responses')
-      || url.username || url.password || url.search || url.hash
-    ) {
+    if (url.username || url.password || url.search || url.hash) {
+      return request;
+    }
+
+    if (url.origin === 'https://api.openai.com' && (path === '/v1' || path === '/v1/responses')) {
+      toolType = 'web_search';
+    } else if (url.origin === 'https://openrouter.ai' && (path === '/api/v1' || path === '/api/v1/responses')) {
+      toolType = 'openrouter:web_search';
+    } else {
       return request;
     }
   } catch {
@@ -30,12 +35,14 @@ export function withOpenAIWebSearch<T extends Record<string, unknown>>(
 
   const tools = Array.isArray(request.tools) ? request.tools : [];
   if (tools.some((tool) => (
-    tool?.type === 'web_search'
-    || tool?.type === 'web_search_preview'
-    || tool?.type === 'web_search_preview_2025_03_11'
+    tool?.type === toolType
+    || (toolType === 'web_search' && (
+      tool?.type === 'web_search_preview'
+      || tool?.type === 'web_search_preview_2025_03_11'
+    ))
   ))) {
     return request;
   }
 
-  return { ...request, tools: [...tools, { type: 'web_search' }] };
+  return { ...request, tools: [...tools, { type: toolType }] };
 }
