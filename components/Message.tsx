@@ -10,8 +10,9 @@ import WebSearchActivity from './WebSearchActivity';
 import MarkdownRenderer from './MarkdownRenderer';
 import ImageLightbox from './ImageLightbox';
 import {
-  User,
   Bot,
+  Brain,
+  ChevronDown,
   Copy,
   Check,
   Pencil,
@@ -42,6 +43,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName, 
   const [lightboxImageSrc, setLightboxImageSrc] = useState<string | null>(null);
   const [isRawOpen, setIsRawOpen] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [reasoningToggled, setReasoningToggled] = useState<boolean | null>(null);
   const reasoningContainerRef = useRef<HTMLDivElement>(null);
   const shouldStickReasoningScrollRef = useRef(true);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
@@ -52,6 +54,9 @@ export default function Message({ message, onEdit, onRegenerate, assistantName, 
   const canRegenerate = !isSystem && !!onRegenerate;
   const assistantLabel = assistantName?.trim() || 'Assistant';
   const reasoning = message.reasoning?.trim() ? message.reasoning : '';
+  // Reasoning stays expanded while streaming and collapses afterwards unless the user toggled it.
+  // Collapsed reasoning is not rendered, which keeps long conversations cheap to render.
+  const isReasoningOpen = reasoningToggled ?? isStreaming;
   const displayContent = formatResponseCitations(message.content, message.urlCitations);
   const webSearchCalls = isStreaming ? message.webSearchCalls ?? [] : finishWebSearchCalls(
     message.webSearchCalls ?? [],
@@ -107,7 +112,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName, 
     }
 
     container.scrollTop = container.scrollHeight;
-  }, [reasoning]);
+  }, [reasoning, isReasoningOpen]);
 
   const handleReasoningScroll = () => {
     const container = reasoningContainerRef.current;
@@ -218,241 +223,165 @@ export default function Message({ message, onEdit, onRegenerate, assistantName, 
 
   if (isSystem) {
     return (
-      <div className="message-row flex justify-center px-3 sm:px-4">
-        <div className="px-6 py-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 max-w-2xl">
+      <div className="message-row flex justify-center">
+        <div className="max-w-2xl rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
           <span className="font-semibold">System:</span> {message.content}
         </div>
       </div>
     );
   }
 
-  return (
-    <div
-      className={`message-row border rounded-lg px-3 sm:px-4 py-3 ${
-        isUser ? 'bg-slate-50/80 border-slate-200/60' : 'bg-white border-slate-200/80'
-      }`}
-    >
-      <div className="w-full">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="flex-shrink-0">
-              <div className={`w-9 h-9 rounded-md flex items-center justify-center ${
-                isUser
-                  ? 'bg-blue-600'
-                  : 'bg-green-600'
-              }`}>
-                {isUser ? <User className="w-5 h-5 text-white" /> : <Bot className="w-5 h-5 text-white" />}
-              </div>
-            </div>
+  const actionButtonClass = 'ui-icon-btn h-7 w-7';
+  const actionButtons = isEditing ? null : (
+    <>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className={actionButtonClass}
+        title="Copy message"
+        aria-label="Copy message"
+      >
+        {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+      {onEdit && !isStreaming && (
+        <button
+          type="button"
+          onClick={handleStartEdit}
+          className={actionButtonClass}
+          title="Edit message"
+          aria-label="Edit message"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {canRegenerate && (
+        <button
+          type="button"
+          onClick={() => onRegenerate?.(message.id)}
+          className={actionButtonClass}
+          title="重新生成"
+          aria-label="重新生成"
+        >
+          <RotateCw className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {canShowRawResponse && (
+        <button
+          type="button"
+          onClick={() => setIsRawOpen(true)}
+          className={actionButtonClass}
+          title="查看原始响应体"
+          aria-label="查看原始响应体"
+        >
+          <FileText className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </>
+  );
 
-            <div className="flex items-center justify-between min-w-0 flex-1">
-              <div className="font-medium text-base text-slate-700">
-                {isUser ? 'You' : assistantLabel}
-              </div>
-              <div className="flex items-center gap-2">
-                {!isEditing && (
-                  <>
-                    <button
-                      onClick={handleCopy}
-                      className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-                      title="Copy message"
-                    >
-                      {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                    {onEdit && !isStreaming && (
-                      <button
-                        onClick={handleStartEdit}
-                        className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-                        title="Edit message"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                    )}
-                    {canRegenerate && (
-                      <button
-                        onClick={() => onRegenerate?.(message.id)}
-                        className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-                        title="重新生成"
-                        aria-label="重新生成"
-                      >
-                        <RotateCw className="w-4 h-4" />
-                      </button>
-                    )}
-                  </>
-                )}
-                {isEditing && (
-                  <>
-                    <button
-                      onClick={handleSaveEdit}
-                      className="p-1.5 text-green-500 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors"
-                      title="Save changes"
-                    >
-                      <Save className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleCancelEdit}
-                      className="p-1.5 text-red-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                      title="Cancel editing"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-              </div>
+  const imageGallery = messageImageUrls.length > 0 && (
+    <div className={`grid gap-2 ${
+      messageImageUrls.length === 1 ? 'w-full max-w-xs grid-cols-1' : 'w-full max-w-md grid-cols-2'
+    }`}>
+      {messageImageUrls.map((imageUrl, index) => (
+        <button
+          type="button"
+          key={`${imageUrl.slice(0, 32)}-${index}`}
+          className={`group/image relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 ${
+            messageImageUrls.length === 1 ? 'aspect-square w-full max-w-64' : 'aspect-square w-full'
+          }`}
+          onClick={() => setLightboxImageSrc(imageUrl)}
+          aria-label={`View image ${index + 1}`}
+        >
+          <Image
+            src={imageUrl}
+            alt={`Uploaded image ${index + 1}`}
+            fill
+            className="object-cover"
+            unoptimized
+          />
+          <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover/image:bg-black/15">
+            <span className="rounded-full bg-black/50 p-1.5 opacity-0 transition-opacity group-hover/image:opacity-100">
+              <Maximize2 className="h-4 w-4 text-white" />
+            </span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+
+  const audioList = audioRecords.length > 0 && (
+    <div className="flex flex-col gap-1.5">
+      {audioRecords.map((audioRecord, index) => {
+        const isPlaying = playingAudioId === audioRecord.id;
+        const durationSeconds = audioRecord.durationMs
+          ? Math.max(1, Math.round(audioRecord.durationMs / 1000))
+          : null;
+        return (
+          <div
+            key={audioRecord.id}
+            className="flex w-64 max-w-full items-center gap-3 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-4 text-sm text-slate-700"
+          >
+            <button
+              type="button"
+              onClick={() => handleToggleAudio(
+                audioRecord.id,
+                audioRecord.data,
+                audioRecord.mimeType,
+                audioRecord.format
+              )}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white transition-colors hover:bg-slate-700"
+              title={isPlaying ? '暂停音频' : '播放音频'}
+              aria-label={isPlaying ? '暂停音频' : '播放音频'}
+            >
+              {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="ml-0.5 h-3.5 w-3.5" />}
+            </button>
+            <div className="min-w-0 flex-1 truncate font-medium text-slate-800">
+              {audioRecord.role === 'user' ? '用户语音' : '模型语音'} {index + 1}
+            </div>
+            <div className="flex shrink-0 items-center gap-1 text-xs text-slate-400">
+              <Volume2 className="h-3.5 w-3.5" />
+              {audioRecord.format.toUpperCase()}
+              {durationSeconds ? ` · ${durationSeconds}s` : ''}
             </div>
           </div>
+        );
+      })}
+    </div>
+  );
 
-          <div className="space-y-2">
-            {messageImageUrls.length > 0 && (
-              <div className={`grid gap-2 ${
-                messageImageUrls.length === 1 ? 'max-w-xs grid-cols-1' : 'max-w-xl grid-cols-2'
-              }`}>
-                {messageImageUrls.map((imageUrl, index) => (
-                  <div
-                    key={`${imageUrl.slice(0, 32)}-${index}`}
-                    className={`relative overflow-hidden rounded-lg border border-slate-300 cursor-pointer group ${
-                      messageImageUrls.length === 1 ? 'w-64 h-64' : 'aspect-square w-full'
-                    }`}
-                    onClick={() => setLightboxImageSrc(imageUrl)}
-                  >
-                    <Image
-                      src={imageUrl}
-                      alt={`Uploaded image ${index + 1}`}
-                      fill
-                      className="object-contain transition-transform duration-200 group-hover:scale-105"
-                      unoptimized
-                    />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-full p-2">
-                        <Maximize2 className="w-5 h-5 text-white" />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {lightboxImageSrc && (
-              <ImageLightbox
-                src={lightboxImageSrc}
-                alt="Uploaded image"
-                isOpen={lightboxImageSrc !== null}
-                onClose={() => setLightboxImageSrc(null)}
-              />
-            )}
-
-            {audioRecords.length > 0 && (
-              <div className="flex flex-col gap-2">
-                {audioRecords.map((audioRecord, index) => {
-                  const isPlaying = playingAudioId === audioRecord.id;
-                  const durationSeconds = audioRecord.durationMs
-                    ? Math.max(1, Math.round(audioRecord.durationMs / 1000))
-                    : null;
-                  return (
-                    <div
-                      key={audioRecord.id}
-                      className="flex max-w-md items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleToggleAudio(
-                          audioRecord.id,
-                          audioRecord.data,
-                          audioRecord.mimeType,
-                          audioRecord.format
-                        )}
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white transition-colors hover:bg-blue-700"
-                        title={isPlaying ? '暂停音频' : '播放音频'}
-                        aria-label={isPlaying ? '暂停音频' : '播放音频'}
-                      >
-                        {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                      </button>
-                      <Volume2 className="h-4 w-4 shrink-0 text-slate-500" />
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-slate-800">
-                          {audioRecord.role === 'user' ? '用户语音' : '模型语音'} {index + 1}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {audioRecord.format.toUpperCase()}
-                          {durationSeconds ? ` | ${durationSeconds}s` : ''}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="text-slate-800 leading-relaxed text-base">
-              {isEditing ? (
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full px-4 py-3 bg-white text-slate-900 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none min-h-[100px]"
-                  rows={Math.max(3, editContent.split('\n').length)}
-                />
-              ) : isUser ? (
-                <div className="whitespace-pre-wrap">{message.content}</div>
-              ) : (
-                <div className="space-y-3">
-                  {webSearchCalls.length > 0 && <WebSearchActivity calls={webSearchCalls} />}
-                  {reasoning && (
-                    <div className="rounded-lg border border-slate-300 bg-slate-100">
-                      <div className="border-b border-slate-300 px-3 py-2 text-xs font-medium tracking-wide text-slate-950">
-                        Reasoning
-                      </div>
-                      <div
-                        ref={reasoningContainerRef}
-                        onScroll={handleReasoningScroll}
-                        className="max-h-44 overflow-y-auto px-3 py-2"
-                      >
-                        <MarkdownRenderer
-                          content={reasoning}
-                          className="markdown-body-reasoning"
-                        />
-                      </div>
-                    </div>
-                  )}
-                  {message.content.trim() ? (
-                    <MarkdownRenderer content={displayContent} />
-                  ) : streamNotice || isStreaming || webSearchCalls.length > 0 ? null : (
-                    <div className="text-slate-400 text-sm">No content</div>
-                  )}
-                  {streamNotice && (
-                    <div className={`rounded-lg border px-3 py-2 text-sm ${
-                      message.streamState === 'error'
-                        ? 'border-amber-200 bg-amber-50 text-amber-900'
-                        : 'border-slate-200 bg-slate-50 text-slate-700'
-                    }`}>
-                      {streamNotice}
-                    </div>
-                  )}
-                </div>
-              )}
-              {(showUsage || canShowRawResponse) && (
-                <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-xs text-slate-400">
-                  {showUsage && (
-                    <span>
-                      {usageParts.join(' | ')}
-                    </span>
-                  )}
-                  {canShowRawResponse && (
-                    <button
-                      type="button"
-                      onClick={() => setIsRawOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
-                      title="查看原始响应体"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      原始响应
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+  const editor = (
+    <div className="w-full rounded-2xl border border-slate-200 bg-white p-2 focus-within:border-slate-300">
+      <textarea
+        value={editContent}
+        onChange={(e) => setEditContent(e.target.value)}
+        className="min-h-[96px] w-full resize-none bg-transparent px-2 py-1.5 text-base text-slate-900 outline-none"
+        rows={Math.max(3, editContent.split('\n').length)}
+        autoFocus
+      />
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={handleCancelEdit} className="ui-btn ui-btn-secondary h-8 px-3 text-[13px]">
+          <X className="h-3.5 w-3.5" />
+          Cancel
+        </button>
+        <button type="button" onClick={handleSaveEdit} className="ui-btn ui-btn-primary h-8 px-3 text-[13px]">
+          <Save className="h-3.5 w-3.5" />
+          Save
+        </button>
       </div>
+    </div>
+  );
+
+  const modals = (
+    <>
+      {lightboxImageSrc && (
+        <ImageLightbox
+          src={lightboxImageSrc}
+          alt="Uploaded image"
+          isOpen={lightboxImageSrc !== null}
+          onClose={() => setLightboxImageSrc(null)}
+        />
+      )}
       {canShowRawResponse && (
         <RawResponseModal
           isOpen={isRawOpen}
@@ -460,6 +389,104 @@ export default function Message({ message, onEdit, onRegenerate, assistantName, 
           onClose={() => setIsRawOpen(false)}
         />
       )}
+    </>
+  );
+
+  if (isUser) {
+    return (
+      <div className="message-row flex flex-col items-end gap-1.5">
+        {imageGallery && <div className="flex w-full justify-end">{imageGallery}</div>}
+        {audioList}
+        {isEditing ? editor : message.content && (
+          <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-3xl bg-slate-100 px-4 py-2.5 text-[15px] leading-relaxed text-slate-900 sm:max-w-[75%]">
+            {message.content}
+          </div>
+        )}
+        <div className="message-actions flex items-center gap-0.5 text-slate-400">{actionButtons}</div>
+        {modals}
+      </div>
+    );
+  }
+
+  const hasContent = !!message.content.trim();
+  const showTyping = isStreaming && !hasContent && !reasoning && webSearchCalls.length === 0;
+
+  return (
+    <div className="message-row">
+      <div className="mb-1.5 flex items-center gap-2">
+        <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-slate-900 text-white">
+          <Bot className="h-3.5 w-3.5" />
+        </div>
+        <div className="truncate text-sm font-medium text-slate-700">{assistantLabel}</div>
+      </div>
+
+      <div className="space-y-3">
+        {imageGallery}
+        {audioList}
+
+        {isEditing ? editor : (
+          <>
+            {webSearchCalls.length > 0 && <WebSearchActivity calls={webSearchCalls} />}
+            {reasoning && (
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/70">
+                <button
+                  type="button"
+                  onClick={() => setReasoningToggled(!isReasoningOpen)}
+                  className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-[13px] font-medium text-slate-500 transition-colors hover:text-slate-800"
+                  aria-expanded={isReasoningOpen}
+                >
+                  <Brain className="h-3.5 w-3.5" />
+                  <span>{isStreaming && !hasContent ? 'Thinking…' : 'Reasoning'}</span>
+                  {reasoningTokens !== undefined && (
+                    <span className="font-normal text-slate-400">· {reasoningTokens} tokens</span>
+                  )}
+                  <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${isReasoningOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {isReasoningOpen && (
+                  <div
+                    ref={reasoningContainerRef}
+                    onScroll={handleReasoningScroll}
+                    className="max-h-60 overflow-y-auto border-t border-slate-200/80 px-3 py-2"
+                  >
+                    <MarkdownRenderer
+                      content={reasoning}
+                      className="markdown-body-reasoning"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+            {hasContent ? (
+              <MarkdownRenderer content={displayContent} />
+            ) : showTyping ? (
+              <div className="typing-dots" aria-label="Generating"><span /><span /><span /></div>
+            ) : streamNotice || isStreaming || webSearchCalls.length > 0 ? null : (
+              <div className="text-sm text-slate-400">No content</div>
+            )}
+            {streamNotice && (
+              <div className={`rounded-xl border px-3 py-2 text-sm ${
+                message.streamState === 'error'
+                  ? 'border-amber-200 bg-amber-50 text-amber-900'
+                  : 'border-slate-200 bg-slate-50 text-slate-600'
+              }`}>
+                {streamNotice}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {!isStreaming && (
+        <div className="mt-1.5 -ml-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <div className="message-actions flex items-center gap-0.5">{actionButtons}</div>
+          {showUsage && (
+            <span className="ml-auto text-xs tabular-nums text-slate-400">
+              {usageParts.join(' · ')}
+            </span>
+          )}
+        </div>
+      )}
+      {modals}
     </div>
   );
 }

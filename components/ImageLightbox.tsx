@@ -69,14 +69,14 @@ export default function ImageLightbox({ src, alt = 'Image', isOpen, onClose }: I
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
       onClick={handleBackdropClick}
     >
       {/* Toolbar */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-lg px-4 py-2 z-10">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 z-10">
         <button
           onClick={zoomOut}
-          className="p-2 text-white hover:bg-white/20 rounded-md transition-colors"
+          className="p-2 text-white hover:bg-white/15 rounded-full transition-colors"
           title="缩小"
         >
           <ZoomOut className="w-5 h-5" />
@@ -86,7 +86,7 @@ export default function ImageLightbox({ src, alt = 'Image', isOpen, onClose }: I
         </span>
         <button
           onClick={zoomIn}
-          className="p-2 text-white hover:bg-white/20 rounded-md transition-colors"
+          className="p-2 text-white hover:bg-white/15 rounded-full transition-colors"
           title="放大"
         >
           <ZoomIn className="w-5 h-5" />
@@ -94,7 +94,7 @@ export default function ImageLightbox({ src, alt = 'Image', isOpen, onClose }: I
         <div className="w-px h-6 bg-white/30 mx-1" />
         <button
           onClick={rotate}
-          className="p-2 text-white hover:bg-white/20 rounded-md transition-colors"
+          className="p-2 text-white hover:bg-white/15 rounded-full transition-colors"
           title="旋转"
         >
           <RotateCw className="w-5 h-5" />
@@ -102,7 +102,7 @@ export default function ImageLightbox({ src, alt = 'Image', isOpen, onClose }: I
         <div className="w-px h-6 bg-white/30 mx-1" />
         <button
           onClick={resetTransform}
-          className="px-3 py-1.5 text-white text-sm hover:bg-white/20 rounded-md transition-colors"
+          className="px-3 py-1.5 text-white text-sm hover:bg-white/15 rounded-full transition-colors"
           title="重置"
         >
           重置

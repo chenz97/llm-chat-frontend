@@ -39,9 +39,9 @@ export default function MessageList({ messages, scrollContainerRef, streamingMes
   };
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-7">
       {hiddenCount > 0 && (
-        <button type="button" onClick={showEarlier} className="w-full py-2 text-sm text-blue-600 hover:text-blue-800">
+        <button type="button" onClick={showEarlier} className="mx-auto block rounded-full border border-slate-200 px-4 py-1.5 text-xs text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800">
           查看更早的消息（还有 {hiddenCount} 条）
         </button>
       )}

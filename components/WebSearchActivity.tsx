@@ -24,8 +24,8 @@ export default function WebSearchActivity({ calls }: { calls: WebSearchCall[] })
   const allCompleted = calls.every((call) => call.status === 'completed');
 
   return (
-    <section aria-label="网页搜索" className="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2.5 text-sm">
-      <div className="flex items-center gap-2 text-blue-900" role="status" aria-live="polite">
+    <section aria-label="网页搜索" className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 text-sm">
+      <div className="flex items-center gap-2 text-slate-700" role="status" aria-live="polite">
         <Globe className="h-4 w-4 shrink-0" aria-hidden="true" />
         <span className="font-medium">网页搜索</span>
         <span className="ml-auto flex items-center gap-1.5 text-xs text-slate-600">
@@ -47,7 +47,7 @@ export default function WebSearchActivity({ calls }: { calls: WebSearchCall[] })
                   <span className="shrink-0 text-xs text-slate-500">{STATUS_LABELS[call.status]}</span>
                 </div>
                 {call.queries?.map((query) => <p key={query} className="mt-0.5 break-words text-xs text-slate-600">{query}</p>)}
-                {url && <a href={url} target="_blank" rel="noopener noreferrer" className="mt-0.5 block break-all text-xs text-blue-700 underline hover:text-blue-900">{url}</a>}
+                {url && <a href={url} target="_blank" rel="noopener noreferrer" className="mt-0.5 block break-all text-xs text-blue-600 underline decoration-blue-600/30 hover:decoration-blue-600">{url}</a>}
                 {call.pattern && <p className="mt-0.5 break-words text-xs text-slate-600">{call.pattern}</p>}
               </div>
             </li>

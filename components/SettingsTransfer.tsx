@@ -224,28 +224,28 @@ export default function SettingsTransfer() {
 
   return (
     <div className="space-y-4">
-      <div className="app-panel p-4 sm:p-5 space-y-2">
-        <h3 className="text-lg font-semibold text-slate-900">Export Settings</h3>
+      <div className="ui-card space-y-2">
+        <h3 className="ui-section-title">Export Settings</h3>
         <p className="text-sm text-slate-600">
           Download a JSON backup of your API configurations and assistant presets.
         </p>
         <button
           onClick={handleExport}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="ui-btn ui-btn-primary"
         >
           <Download className="w-4 h-4" />
           Export JSON
         </button>
       </div>
 
-      <div className="app-panel p-4 sm:p-5 space-y-2">
-        <h3 className="text-lg font-semibold text-slate-900">Import Settings</h3>
+      <div className="ui-card space-y-2">
+        <h3 className="ui-section-title">Import Settings</h3>
         <p className="text-sm text-slate-600">
           Import a JSON file to replace your existing API configurations and assistant presets.
         </p>
         <button
           onClick={handleImportClick}
-          className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-800"
+          className="ui-btn ui-btn-secondary"
         >
           <Upload className="w-4 h-4" />
           Import JSON
@@ -262,9 +262,9 @@ export default function SettingsTransfer() {
         </p>
       </div>
 
-      <div className="app-panel p-4 sm:p-5 space-y-3">
+      <div className="ui-card space-y-3">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">Encrypted GitHub Sync</h3>
+          <h3 className="ui-section-title">Encrypted GitHub Sync</h3>
           <p className="text-sm text-slate-600">
             Settings are encrypted in this browser (AES-256-GCM, passphrase-derived key) and stored as a file in a
             private GitHub repository. GitHub only ever sees ciphertext.
@@ -291,7 +291,7 @@ export default function SettingsTransfer() {
               onChange={(event) => handleSyncConfigChange('githubToken', event.target.value)}
               placeholder="Fine-grained token: this repo only, Contents read/write"
               autoComplete="off"
-              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+              className="ui-input"
             />
           </label>
           <label className="grid gap-1 text-sm font-medium text-slate-700">
@@ -301,7 +301,7 @@ export default function SettingsTransfer() {
               value={syncConfig.repository}
               onChange={(event) => handleSyncConfigChange('repository', event.target.value)}
               placeholder="owner/repo"
-              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+              className="ui-input"
             />
           </label>
           <label className="grid gap-1 text-sm font-medium text-slate-700">
@@ -311,7 +311,7 @@ export default function SettingsTransfer() {
               value={syncConfig.path}
               onChange={(event) => handleSyncConfigChange('path', event.target.value)}
               placeholder={DEFAULT_SETTINGS_SYNC_FILENAME}
-              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+              className="ui-input"
             />
           </label>
           <label className="grid gap-1 text-sm font-medium text-slate-700">
@@ -322,7 +322,7 @@ export default function SettingsTransfer() {
               onChange={(event) => setPassphrase(event.target.value)}
               placeholder={`At least ${MIN_PASSPHRASE_LENGTH} characters; never saved`}
               autoComplete="new-password"
-              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+              className="ui-input"
             />
           </label>
         </div>
@@ -331,7 +331,7 @@ export default function SettingsTransfer() {
           <button
             onClick={handleSaveSyncConfig}
             disabled={isSyncing}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="ui-btn ui-btn-secondary"
           >
             <Save className="w-4 h-4" />
             Save Sync Config
@@ -339,7 +339,7 @@ export default function SettingsTransfer() {
           <button
             onClick={handleSyncToGitHub}
             disabled={isSyncing}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="ui-btn ui-btn-primary"
           >
             <CloudUpload className="w-4 h-4" />
             Sync to GitHub
@@ -347,7 +347,7 @@ export default function SettingsTransfer() {
           <button
             onClick={handleSyncFromGitHub}
             disabled={isSyncing}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="ui-btn ui-btn-secondary"
           >
             <CloudDownload className="w-4 h-4" />
             Sync from GitHub

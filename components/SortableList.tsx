@@ -118,7 +118,7 @@ function SortableRow({ id, label, className, children }: SortableRowProps) {
       {...listeners}
       aria-label={`Drag to reorder ${label}`}
       title="Drag to reorder"
-      className="flex-shrink-0 touch-none rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-grab active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+      className="flex-shrink-0 touch-none rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-grab active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-40"
     >
       <GripVertical className="w-4 h-4" />
     </button>
@@ -128,7 +128,7 @@ function SortableRow({ id, label, className, children }: SortableRowProps) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`${className ?? ''} ${isDragging ? 'shadow-lg ring-2 ring-blue-200' : ''}`}
+      className={`${className ?? ''} ${isDragging ? 'shadow-lg ring-1 ring-slate-300' : ''}`}
     >
       {children(dragHandle)}
     </div>

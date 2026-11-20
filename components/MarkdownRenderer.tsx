@@ -3,7 +3,7 @@
 import { Check, Copy } from 'lucide-react';
 import { isValidElement, memo, useState } from 'react';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -71,23 +71,38 @@ function CodeBlock({
     window.setTimeout(() => setDidCopy(false), 1600);
   };
 
+  const language = getCodeLanguage(children);
+
   return (
-    <div className="markdown-code-block group">
-      <button
-        type="button"
-        className="markdown-code-copy-button"
-        onClick={handleCopy}
-        disabled={!codeText}
-        aria-label={didCopy ? 'Code copied' : 'Copy code'}
-        title={didCopy ? 'Copied' : 'Copy code'}
-      >
-        {didCopy ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-      </button>
-      <pre className="bg-slate-900 rounded-lg p-4 overflow-x-auto" {...props}>
+    <div className="markdown-code-block">
+      <div className="markdown-code-header">
+        <span>{language || 'code'}</span>
+        <button
+          type="button"
+          className="markdown-code-copy-button"
+          onClick={handleCopy}
+          disabled={!codeText}
+          aria-label={didCopy ? 'Code copied' : 'Copy code'}
+          title={didCopy ? 'Copied' : 'Copy code'}
+        >
+          {didCopy ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          <span>{didCopy ? 'Copied' : 'Copy'}</span>
+        </button>
+      </div>
+      <pre {...props}>
         {children}
       </pre>
     </div>
   );
+}
+
+function getCodeLanguage(children: ReactNode): string {
+  const codeElement = Array.isArray(children) ? children[0] : children;
+  if (!isValidElement<{ className?: string }>(codeElement)) {
+    return '';
+  }
+  const match = /(?:^|\s)language-([\w+#.-]+)/.exec(codeElement.props.className ?? '');
+  return match ? match[1] : '';
 }
 
 function isEscaped(text: string, index: number): boolean {
@@ -191,46 +206,39 @@ function normalizeMathDelimiters(source: string): string {
   return output.join('\n');
 }
 
+const remarkPlugins = [remarkGfm, remarkMath];
+const rehypePlugins = [rehypeKatex, rehypeHighlight];
+
+// Strip the hast `node` prop so it is not spread onto DOM elements.
+function omitNode<T extends ExtraProps>(props: T): Omit<T, 'node'> {
+  const rest = { ...props };
+  delete rest.node;
+  return rest;
+}
+
+const markdownComponents: Components = {
+  pre(props) {
+    return <CodeBlock {...omitNode(props)} />;
+  },
+  table(props) {
+    return (
+      <div className="markdown-table-wrap">
+        <table {...omitNode(props)} />
+      </div>
+    );
+  },
+  a(props) {
+    return <a {...omitNode(props)} target="_blank" rel="noopener noreferrer" />;
+  },
+};
+
 function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   return (
-    <div className={`markdown-body prose prose-invert max-w-none ${className}`.trim()}>
+    <div className={`markdown-body ${className}`.trim()}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex, rehypeHighlight]}
-        components={{
-          code({
-            inline,
-            className,
-            children,
-            ...props
-          }: ComponentPropsWithoutRef<'code'> & { inline?: boolean }) {
-            return inline ? (
-              <code className="px-1.5 py-0.5 bg-slate-100 text-slate-900 rounded-md text-sm" {...props}>
-                {children}
-              </code>
-            ) : (
-              <code className={className} {...props}>
-                {children}
-              </code>
-            );
-          },
-          pre({ children, ...props }: ComponentPropsWithoutRef<'pre'>) {
-            return <CodeBlock {...props}>{children}</CodeBlock>;
-          },
-          a({ children, href, ...props }: ComponentPropsWithoutRef<'a'>) {
-            return (
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 underline"
-                {...props}
-              >
-                {children}
-              </a>
-            );
-          },
-        }}
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
+        components={markdownComponents}
       >
         {normalizeMathDelimiters(content)}
       </ReactMarkdown>

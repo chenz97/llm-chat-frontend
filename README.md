@@ -20,7 +20,7 @@ A local-first chat interface for OpenAI-compatible chat APIs. The app is built w
 - **Custom Ordering**: Reorder API configurations and assistant presets by dragging the grip handle in Settings (mouse, touch, or keyboard); the order is saved locally and used by the chat selectors
 - **Settings Transfer**: Export and import API configurations and assistant presets as JSON
 - **Encrypted Cloud Sync**: Sync settings to a private GitHub repository; the file is encrypted in the browser (AES-256-GCM) with a passphrase that is never stored
-- **Responsive Design**: A responsive light-theme interface that works on desktop and mobile
+- **Responsive Design**: A lightweight, minimal light-theme interface with a centered chat column, collapsible reasoning, and a slide-in sidebar drawer on mobile
 
 ## Getting Started
 
@@ -132,10 +132,10 @@ Notes:
 
 ### 3. Start Chatting
 
-1. Click "New Chat" in the sidebar
+1. Click the new-chat button (pencil icon) at the top of the sidebar
 2. Select your API configuration and optionally an assistant preset
 3. Type your message or upload an image
-4. Press Enter or click Send, or click the phone button to start voice-call mode with a compatible Chat Completions audio model
+4. Press Enter or click the send arrow, or click the waveform button in the composer to start voice-call mode with a compatible Chat Completions audio model
 
 ### Encrypted Settings Sync
 

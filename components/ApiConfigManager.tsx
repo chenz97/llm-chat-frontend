@@ -183,10 +183,10 @@ export default function ApiConfigManager() {
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-900">API Configurations</h2>
+        <h2 className="text-base font-semibold text-slate-900">API Configurations</h2>
         <button
           onClick={handleAdd}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="ui-btn ui-btn-primary"
         >
           <Plus className="w-4 h-4" />
           Add Config
@@ -198,7 +198,7 @@ export default function ApiConfigManager() {
           items={configs}
           disabled={isReordering}
           className="space-y-2.5"
-          itemClassName="app-panel p-4 sm:p-5"
+          itemClassName="ui-card"
           getItemLabel={(config) => config.name}
           onReorder={(activeId, overId) => void handleReorder(activeId, overId)}
           renderItem={(config, dragHandle) => (editing === config.id ? (
@@ -208,40 +208,40 @@ export default function ApiConfigManager() {
                   placeholder="Name"
                   value={formData.name || ''}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                  className="ui-input"
                 />
                 <input
                   type="text"
                   placeholder="Base URL (e.g., https://api.openai.com/v1)"
                   value={formData.baseUrl || ''}
                   onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                  className="ui-input"
                 />
                 <input
                   type="password"
                   placeholder="API Key"
                   value={formData.apiKey || ''}
                   onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                  className="ui-input"
                 />
                 <input
                   type="text"
                   placeholder="Models (comma-separated, e.g., gpt-4,gpt-3.5-turbo)"
                   value={modelsInput}
                   onChange={(e) => updateModels(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                  className="ui-input"
                 />
                 <div className="flex gap-2">
                   <button
                     onClick={handleSave}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                    className="ui-btn ui-btn-primary"
                   >
                     <Check className="w-4 h-4" />
                     Save
                   </button>
                   <button
                     onClick={handleCancel}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-500 text-white rounded-lg hover:bg-slate-600"
+                    className="ui-btn ui-btn-secondary"
                   >
                     <X className="w-4 h-4" />
                     Cancel
@@ -253,16 +253,16 @@ export default function ApiConfigManager() {
                 <div className="flex justify-between items-start gap-2">
                   <div className="-ml-2 pt-0.5">{dragHandle}</div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-xl text-slate-900">{config.name}</h3>
-                    <p className="text-base text-slate-600 mt-1">{config.baseUrl}</p>
-                    <p className="text-sm text-slate-500 mt-1">
+                    <h3 className="font-semibold text-[15px] text-slate-900">{config.name}</h3>
+                    <p className="text-sm text-slate-600 mt-0.5 break-all">{config.baseUrl}</p>
+                    <p className="text-[13px] text-slate-500 mt-0.5">
                       API Key: {config.apiKey ? '•'.repeat(20) : 'Not set'}
                     </p>
                     <div className="flex flex-wrap gap-1 mt-2">
                       {config.models.map((model, i) => (
                         <span
                           key={i}
-                          className="px-2.5 py-1 bg-blue-100 text-blue-700 text-sm rounded-md border border-blue-200"
+                          className="ui-chip"
                         >
                           {model}
                         </span>
@@ -272,13 +272,13 @@ export default function ApiConfigManager() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleEdit(config)}
-                      className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-md"
+                      className="ui-icon-btn h-9 w-9"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(config.id)}
-                      className="p-2.5 text-red-600 hover:bg-red-50 rounded-md"
+                      className="ui-icon-btn ui-icon-btn-danger h-9 w-9"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -291,7 +291,7 @@ export default function ApiConfigManager() {
         {editing && !configs.find(c => c.id === editing) && (
           <div
             ref={newConfigRef}
-            className="app-panel p-4 sm:p-5"
+            className="ui-card"
           >
             <div className="space-y-3">
               <input
@@ -299,40 +299,40 @@ export default function ApiConfigManager() {
                 placeholder="Name"
                 value={formData.name || ''}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                className="ui-input"
               />
               <input
                 type="text"
                 placeholder="Base URL (e.g., https://api.openai.com/v1)"
                 value={formData.baseUrl || ''}
                 onChange={(e) => setFormData({ ...formData, baseUrl: e.target.value })}
-                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                className="ui-input"
               />
               <input
                 type="password"
                 placeholder="API Key"
                 value={formData.apiKey || ''}
                 onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                className="ui-input"
               />
               <input
                 type="text"
                 placeholder="Models (comma-separated, e.g., gpt-4,gpt-3.5-turbo)"
                 value={modelsInput}
                 onChange={(e) => updateModels(e.target.value)}
-                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-slate-900"
+                className="ui-input"
               />
               <div className="flex gap-2">
                 <button
                   onClick={handleSave}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  className="ui-btn ui-btn-primary"
                 >
                   <Check className="w-4 h-4" />
                   Save
                 </button>
                 <button
                   onClick={handleCancel}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-slate-500 text-white rounded-lg hover:bg-slate-600"
+                  className="ui-btn ui-btn-secondary"
                 >
                   <X className="w-4 h-4" />
                   Cancel

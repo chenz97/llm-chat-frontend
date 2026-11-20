@@ -19,7 +19,7 @@ import ConversationSidebar from '@/components/ConversationSidebar';
 import ChatInterface from '@/components/ChatInterface';
 import SettingsModal from '@/components/SettingsModal';
 import ConversationConfigSelector from '@/components/ConversationConfigSelector';
-import { Menu, X } from 'lucide-react';
+import { Menu, SquarePen } from 'lucide-react';
 
 export default function Home() {
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
@@ -211,9 +211,7 @@ export default function Home() {
 
   if (!mounted) {
     return (
-      <div className="app-shell items-center justify-center">
-        <div className="text-slate-500">Loading...</div>
-      </div>
+      <div className="app-shell" aria-busy="true" />
     );
   }
 
@@ -355,87 +353,86 @@ export default function Home() {
     }
   };
 
+  const sidebarContent = (
+    <aside className="app-sidebar w-full">
+      <ConversationSidebar
+        currentConversationId={currentConversation?.id || null}
+        onSelectConversation={handleSelectConversation}
+        onNewConversation={handleNewConversation}
+      />
+
+      {currentConversation && (
+        <ConversationConfigSelector
+          selectedApiConfigId={selectedApiConfigId}
+          selectedPresetId={selectedPresetId}
+          selectedModelIdOverride={selectedModelIdOverride}
+          onApiConfigChange={handleApiConfigChange}
+          onPresetChange={handlePresetChange}
+          onModelChange={handleModelChange}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+        />
+      )}
+    </aside>
+  );
+
   return (
     <>
       <div className="app-shell">
-        {!isCompactLayout && (
-          <div className="w-full lg:w-64 flex-shrink-0">
-            <div className="h-full flex flex-col gap-2">
-              <ConversationSidebar
-                currentConversationId={currentConversation?.id || null}
-                onSelectConversation={handleSelectConversation}
-                onNewConversation={handleNewConversation}
-              />
+        {!isCompactLayout && <div className="w-[272px] flex-shrink-0">{sidebarContent}</div>}
 
-              {currentConversation && (
-                <ConversationConfigSelector
-                  selectedApiConfigId={selectedApiConfigId}
-                  selectedPresetId={selectedPresetId}
-                  selectedModelIdOverride={selectedModelIdOverride}
-                  onApiConfigChange={handleApiConfigChange}
-                  onPresetChange={handlePresetChange}
-                  onModelChange={handleModelChange}
-                  onOpenSettings={() => setIsSettingsOpen(true)}
-                />
-              )}
-            </div>
-          </div>
-        )}
+        <main className="flex min-w-0 flex-1 flex-col">
+          {isCompactLayout && (
+            <header className="flex h-12 flex-shrink-0 items-center gap-1 border-b border-slate-200/80 px-2">
+              <button
+                type="button"
+                onClick={() => setIsSidebarOpen(true)}
+                className="ui-icon-btn h-9 w-9"
+                title="Open sidebar"
+                aria-label="Open sidebar"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+              <div className="min-w-0 flex-1 truncate px-1 text-center text-sm font-medium text-slate-800">
+                {currentConversation?.title || 'New Conversation'}
+              </div>
+              <button
+                type="button"
+                onClick={handleNewConversation}
+                className="ui-icon-btn h-9 w-9"
+                title="New chat"
+                aria-label="New chat"
+              >
+                <SquarePen className="h-5 w-5" />
+              </button>
+            </header>
+          )}
 
-        <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
           <ChatInterface
             conversation={currentConversation}
             onConversationUpdate={handleConversationUpdate}
           />
-        </div>
+        </main>
       </div>
 
       {isCompactLayout && (
-        <div
-          className={`fixed inset-y-0 left-0 z-[70] w-[260px] max-w-[85vw] transform transition-transform duration-200 ${
-            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
-        >
-          <div className="h-full flex flex-col gap-2">
-            <ConversationSidebar
-              currentConversationId={currentConversation?.id || null}
-              onSelectConversation={handleSelectConversation}
-              onNewConversation={handleNewConversation}
-            />
-
-            {currentConversation && (
-              <ConversationConfigSelector
-                selectedApiConfigId={selectedApiConfigId}
-                selectedPresetId={selectedPresetId}
-                selectedModelIdOverride={selectedModelIdOverride}
-                onApiConfigChange={handleApiConfigChange}
-                onPresetChange={handlePresetChange}
-                onModelChange={handleModelChange}
-                onOpenSettings={() => setIsSettingsOpen(true)}
-              />
-            )}
+        <>
+          <div
+            className={`fixed inset-0 z-[60] bg-slate-900/25 transition-opacity duration-200 ${
+              isSidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+            onClick={() => setIsSidebarOpen(false)}
+            aria-hidden="true"
+          />
+          <div
+            className={`fixed inset-y-0 left-0 z-[70] w-[288px] max-w-[85vw] shadow-xl transition-transform duration-200 ease-out ${
+              isSidebarOpen ? 'translate-x-0' : '-translate-x-full shadow-none'
+            }`}
+            aria-hidden={!isSidebarOpen}
+            inert={!isSidebarOpen}
+          >
+            {sidebarContent}
           </div>
-        </div>
-      )}
-
-      {isCompactLayout && isSidebarOpen && (
-        <button
-          type="button"
-          onClick={() => setIsSidebarOpen(false)}
-          className="fixed inset-0 z-[60] bg-slate-900/30"
-          aria-label="Close sidebar"
-        />
-      )}
-
-      {isCompactLayout && (
-        <button
-          onClick={() => setIsSidebarOpen((prev) => !prev)}
-          className="fixed top-3 left-3 z-[80] p-2 bg-white border border-slate-200 text-slate-700 hover:text-slate-900 rounded-full shadow-md hover:bg-slate-50 transition-all duration-200"
-          title={isSidebarOpen ? 'Close' : 'Open'}
-          aria-label={isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
-        >
-          {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        </>
       )}
 
       <SettingsModal

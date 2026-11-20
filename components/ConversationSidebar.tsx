@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ConversationSummary } from '@/types';
 import { getConversationSummaries, deleteConversation, setCurrentConversationId } from '@/lib/storage';
-import { MessageSquare, Trash2, Plus, Search } from 'lucide-react';
+import { Search, Sparkles, SquarePen, Trash2 } from 'lucide-react';
 
 interface ConversationSidebarProps {
   currentConversationId: string | null;
@@ -79,95 +79,110 @@ export default function ConversationSidebar({
     void selectConversation();
   };
 
-  if (!isReady) {
-    return (
-      <div className="app-panel w-full flex flex-1 flex-col overflow-hidden lg:h-full">
-        <div className="p-4 border-b border-slate-200">
-          <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-md shadow-sm font-medium text-base">
-            <Plus className="w-4 h-4" />
-            New Chat
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const groups = groupConversations(conversations);
 
   return (
-    <div className="app-panel w-full flex flex-1 flex-col overflow-hidden lg:h-full">
-      <div className="p-4 border-b border-slate-200">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
+        <div className="flex min-w-0 items-center gap-2 px-1">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 text-white">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <span className="truncate text-[15px] font-semibold text-slate-900">LLM Chat</span>
+        </div>
         <button
+          type="button"
           onClick={onNewConversation}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm transition-all duration-200 font-medium text-base"
+          className="ui-icon-btn h-9 w-9"
+          title="New chat"
+          aria-label="New chat"
         >
-          <Plus className="w-4 h-4" />
-          New Chat
+          <SquarePen className="h-[18px] w-[18px]" />
         </button>
+      </div>
 
-        <div className="relative mt-3">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <div className="px-3 pb-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search conversations"
-            className="w-full rounded-md border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none transition-colors duration-200 placeholder:text-slate-400 focus:border-blue-400"
+            placeholder="Search"
+            className="ui-input h-9 border-transparent bg-slate-200/50 py-0 pl-8 hover:border-transparent focus:bg-white"
             aria-label="Search conversations"
           />
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-4">
-        {conversations.length === 0 && !searchQuery.trim() ? (
-          <div className="px-4 py-8 text-center text-slate-400 text-base">
-            No conversations yet
-          </div>
-        ) : conversations.length === 0 ? (
-          <div className="px-4 py-8 text-center text-slate-400 text-base">
-            No matching conversations
+      <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3" aria-label="Conversations">
+        {!isReady ? null : conversations.length === 0 ? (
+          <div className="px-3 py-10 text-center text-sm text-slate-400">
+            {searchQuery.trim() ? 'No matching conversations' : 'No conversations yet'}
           </div>
         ) : (
-          <div className="space-y-1.5">
-            {conversations.map(conv => (
-              <div
-                key={conv.id}
-                onClick={() => handleSelect(conv.id)}
-                className={`group flex items-center gap-3 p-3 rounded-md cursor-pointer transition-all duration-200 ${
-                  currentConversationId === conv.id
-                    ? 'bg-blue-50 border border-blue-200'
-                    : 'hover:bg-slate-50 border border-transparent'
-                }`}
-              >
-                <div className={`p-2 rounded-md ${
-                  currentConversationId === conv.id
-                    ? 'bg-blue-600'
-                    : 'bg-slate-300 group-hover:bg-slate-400'
-                }`}>
-                  <MessageSquare className={`w-4 h-4 ${
-                    currentConversationId === conv.id ? 'text-white' : 'text-slate-700'
-                  }`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className={`text-[15px] font-medium truncate ${
-                    currentConversationId === conv.id ? 'text-slate-900' : 'text-slate-700'
-                  }`}>
-                    {conv.title}
-                  </div>
-                  <div className="text-sm text-slate-500 truncate mt-0.5">
-                    {new Date(conv.updatedAt).toLocaleDateString()}
-                  </div>
-                </div>
-                <button
-                  onClick={(e) => handleDelete(e, conv.id)}
-                  className="opacity-0 group-hover:opacity-100 p-2 hover:bg-red-100 text-slate-400 hover:text-red-600 rounded-md transition-all duration-200"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
+          groups.map((group) => (
+            <div key={group.label} className="mt-3 first:mt-1">
+              <div className="px-2.5 pb-1 text-xs font-medium text-slate-400">{group.label}</div>
+              <ul className="space-y-px">
+                {group.items.map((conv) => {
+                  const isActive = currentConversationId === conv.id;
+                  return (
+                    <li key={conv.id} className="group relative">
+                      <button
+                        type="button"
+                        onClick={() => handleSelect(conv.id)}
+                        className={`block w-full truncate rounded-lg py-2 pl-2.5 pr-9 text-left text-sm transition-colors ${
+                          isActive
+                            ? 'bg-slate-200/70 font-medium text-slate-900'
+                            : 'text-slate-600 hover:bg-slate-200/40 hover:text-slate-900'
+                        }`}
+                        title={conv.title}
+                        aria-current={isActive ? 'true' : undefined}
+                      >
+                        {conv.title}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDelete(e, conv.id)}
+                        className={`ui-icon-btn ui-icon-btn-danger absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100 ${
+                          isActive ? '[@media(hover:hover)]:opacity-100' : ''
+                        }`}
+                        title="Delete conversation"
+                        aria-label={`Delete ${conv.title}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))
         )}
-      </div>
-
+      </nav>
     </div>
   );
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function groupConversations(conversations: ConversationSummary[]) {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const today = startOfToday.getTime();
+  const buckets: { label: string; since: number; items: ConversationSummary[] }[] = [
+    { label: 'Today', since: today, items: [] },
+    { label: 'Yesterday', since: today - DAY_MS, items: [] },
+    { label: 'Previous 7 days', since: today - 7 * DAY_MS, items: [] },
+    { label: 'Previous 30 days', since: today - 30 * DAY_MS, items: [] },
+    { label: 'Older', since: -Infinity, items: [] },
+  ];
+
+  for (const conv of conversations) {
+    const bucket = buckets.find((candidate) => conv.updatedAt >= candidate.since) ?? buckets[buckets.length - 1];
+    bucket.items.push(conv);
+  }
+
+  return buckets.filter((bucket) => bucket.items.length > 0);
 }

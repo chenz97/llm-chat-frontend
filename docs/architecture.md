@@ -135,11 +135,14 @@ The message renderer distinguishes user, assistant, and system roles and include
 
 `app/globals.css` defines the shared visual system:
 
-- layout utility classes such as `.app-shell` and `.app-panel`,
-- global color variables,
-- animations for shell and message entry,
-- markdown typography rules,
-- custom scrollbars.
+- global color and radius variables,
+- layout classes (`.app-shell`, `.app-sidebar`, `.chat-column`) in the Tailwind `components` layer so utilities can still override them,
+- reusable control classes (`.ui-input`, `.ui-label`, `.ui-btn` with `-primary`/`-secondary`/`-ghost`, `.ui-icon-btn`, `.ui-card`, `.ui-chip`) used by the sidebar, composer, and settings forms,
+- hover-revealed message actions (`.message-actions`, always visible on touch devices) and the streaming typing indicator,
+- markdown typography, code-block header, and table wrapper rules,
+- thin custom scrollbars.
+
+The layout is a flat full-height sidebar plus a chat area whose messages and composer share a centered reading column. On narrow or portrait screens the sidebar becomes a slide-in drawer opened from a compact header. The visual layer avoids `backdrop-filter`, background gradients, and whole-page entrance animations to keep paint and GPU cost low; message entry uses an opacity-only fade. Assistant reasoning is expanded while streaming and collapses afterwards, and collapsed reasoning is not rendered.
 
 `app/layout.tsx` applies Geist Sans and Geist Mono as application fonts and sets the root metadata for the Next.js app shell.
 

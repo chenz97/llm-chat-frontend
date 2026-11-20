@@ -53,7 +53,7 @@ import {
 } from '@/lib/audioSegment';
 import { convertImagesToBase64, validateImageFile } from '@/lib/imageUtils';
 import MessageList from './MessageList';
-import { Send, Image as ImageIcon, Loader2, Square, ArrowDown, Phone, PhoneOff } from 'lucide-react';
+import { ArrowDown, ArrowUp, AudioLines, ImagePlus, PhoneOff, Sparkles, Square, X } from 'lucide-react';
 
 interface ChatInterfaceProps {
   conversation: Conversation | null;
@@ -1731,7 +1731,7 @@ export default function ChatInterface({
 
   if (!conversation) {
     return (
-      <div className="app-panel flex-1 flex items-center justify-center text-slate-500 px-8 py-6">
+      <div className="flex flex-1 items-center justify-center px-8 py-6 text-sm text-slate-400">
         <p className="text-center">Select a conversation or create a new one to start chatting</p>
       </div>
     );
@@ -1739,10 +1739,10 @@ export default function ChatInterface({
 
   if (!apiConfig) {
     return (
-      <div className="app-panel flex-1 flex items-center justify-center px-8 py-6">
+      <div className="flex flex-1 items-center justify-center px-8 py-6">
         <div className="text-center">
-          <p className="text-red-400 mb-3">API configuration not found</p>
-          <p className="text-gray-500 text-sm">
+          <p className="mb-1 font-medium text-slate-800">API configuration not found</p>
+          <p className="text-sm text-slate-500">
             Please set up an API configuration in Settings
           </p>
         </div>
@@ -1750,68 +1750,97 @@ export default function ChatInterface({
     );
   }
 
+  const isEmpty = messages.length === 0;
+  const canSend = !!input.trim() && !isCallMode;
+  const resolvedModelId = conversation.modelIdOverride
+    || assistantPreset?.modelId
+    || apiConfig.models[0]
+    || '';
+
   return (
-    <div className="app-panel flex-1 min-h-0 flex flex-col overflow-hidden relative">
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-4 pt-3 pb-3"
+        className="min-h-0 flex-1 overflow-y-auto px-4 [scrollbar-gutter:stable_both-edges] sm:px-6"
       >
-        <MessageList
-          key={conversation.id}
-          messages={messages}
-          scrollContainerRef={scrollContainerRef}
-          onEdit={handleEditMessage}
-          onRegenerate={handleRegenerate}
-          assistantName={assistantPreset?.name}
-          streamingMessageId={isLoading ? messages[messages.length - 1]?.id : undefined}
-        />
+        {isEmpty ? (
+          <div className="chat-column flex h-full flex-col items-center justify-center pb-10 text-center">
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+              {assistantPreset?.name ? `Chat with ${assistantPreset.name}` : 'How can I help you today?'}
+            </h1>
+            <p className="mt-1.5 text-sm text-slate-500">
+              {apiConfig.name}
+              {resolvedModelId ? ` · ${resolvedModelId}` : ''}
+            </p>
+          </div>
+        ) : (
+          <div className="chat-column pt-6 pb-4">
+            <MessageList
+              key={conversation.id}
+              messages={messages}
+              scrollContainerRef={scrollContainerRef}
+              onEdit={handleEditMessage}
+              onRegenerate={handleRegenerate}
+              assistantName={assistantPreset?.name}
+              streamingMessageId={isLoading ? messages[messages.length - 1]?.id : undefined}
+            />
+          </div>
+        )}
       </div>
 
-      {!isAutoScrollEnabled && (
-        <button
-          type="button"
-          onClick={handleJumpToBottom}
-          className="absolute right-4 bottom-24 z-20 w-9 h-9 bg-white border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 rounded-full shadow-md transition-all duration-200 flex items-center justify-center"
-          aria-label="跳到底部"
-          title="跳到底部"
-        >
-          <ArrowDown className="w-4 h-4" />
-        </button>
-      )}
+      <div className="relative flex-shrink-0 px-3 pb-3 before:pointer-events-none before:absolute before:inset-x-0 before:-top-6 before:h-6 before:bg-gradient-to-t before:from-white before:to-transparent sm:px-6 sm:pb-5">
+        {!isAutoScrollEnabled && !isEmpty && (
+          <button
+            type="button"
+            onClick={handleJumpToBottom}
+            className="absolute -top-12 left-1/2 z-20 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-md transition-colors hover:bg-slate-50 hover:text-slate-900"
+            aria-label="跳到底部"
+            title="跳到底部"
+          >
+            <ArrowDown className="h-4 w-4" />
+          </button>
+        )}
 
-      <div className="flex-shrink-0 border-t border-slate-200/70 bg-slate-50/95 backdrop-blur-sm px-3 sm:px-4 py-3 shadow-lg">
-        <div className="w-full">
+        <div className="chat-column">
           {(isCallMode || callStatus === 'error') && (
-            <div className={`mb-3 rounded-lg border px-3 py-2 ${
+            <div className={`mb-2 flex items-center gap-3 rounded-2xl border px-4 py-2.5 ${
               callStatus === 'error'
                 ? 'border-red-200 bg-red-50 text-red-800'
-                : 'border-blue-200 bg-blue-50 text-blue-900'
+                : 'border-slate-200 bg-slate-50 text-slate-800'
             }`}>
-              <div className="flex items-center gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className={`call-status-pulse call-status-pulse-${callStatus}`} />
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold">{callStatusLabel}</div>
-                    {callStatusHint && callStatusHint !== callStatusLabel && (
-                      <div className="truncate text-xs opacity-80">{callStatusHint}</div>
-                    )}
-                  </div>
-                </div>
+              <div className={`call-status-pulse call-status-pulse-${callStatus}`} />
+              <div className="min-w-0">
+                <div className="text-sm font-medium">{callStatusLabel}</div>
+                {callStatusHint && callStatusHint !== callStatusLabel && (
+                  <div className="truncate text-xs opacity-75">{callStatusHint}</div>
+                )}
               </div>
             </div>
           )}
 
-          {draftImages.length > 0 && (
-            <div className="mb-4">
-              <div className="mb-2 text-xs font-medium text-slate-500">
-                已附加 {draftImages.length} 张图片
-              </div>
-              <div className="grid max-w-2xl grid-cols-2 gap-2 sm:grid-cols-3">
+          <form
+            onSubmit={handleSubmit}
+            className="rounded-[26px] border border-slate-200 bg-white p-2 shadow-[0_2px_12px_-4px_rgba(15,23,42,0.08)] transition-colors focus-within:border-slate-300"
+          >
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              multiple
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+
+            {draftImages.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-2 pt-1 pb-2" aria-label={`已附加 ${draftImages.length} 张图片`}>
                 {draftImages.map((imageUrl, index) => (
                   <div
                     key={`${imageUrl.slice(0, 32)}-${index}`}
-                    className="relative h-28 overflow-hidden rounded-lg border border-slate-300 bg-white"
+                    className="relative h-16 w-16 overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
                   >
                     <Image
                       src={imageUrl}
@@ -1825,102 +1854,92 @@ export default function ChatInterface({
                       onClick={() => setDraftImages((currentImages) => (
                         currentImages.filter((_, currentIndex) => currentIndex !== index)
                       ))}
-                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-sm text-white shadow-sm transition-colors duration-200 hover:bg-red-600"
+                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900/70 text-white transition-colors hover:bg-slate-900"
                       title="移除图片"
                       aria-label={`移除第 ${index + 1} 张图片`}
                     >
-                      ×
+                      <X className="h-3 w-3" />
                     </button>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          <form
-            onSubmit={handleSubmit}
-            className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3"
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/*"
-              multiple
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-              className="flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-all duration-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              title="Upload image"
-            >
-              <ImageIcon className="w-5 h-5" />
-            </button>
-
-            <div className="relative flex min-w-0 items-center self-center">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onPaste={handlePasteImage}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit(e);
-                  }
-                }}
-                placeholder="Type your message... (Shift+Enter for new line)"
-                disabled={isLoading}
-                rows={1}
-                className="min-h-11 max-h-32 w-full resize-none rounded-lg border border-slate-200 bg-white px-4 py-[10px] text-base text-slate-900 leading-6 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                style={{
-                  height: 'auto',
-                  overflowY: input.split('\n').length > 3 ? 'auto' : 'hidden'
-                }}
-                onInput={(e) => {
-                  e.currentTarget.style.height = 'auto';
-                  e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px';
-                }}
-              />
-            </div>
-
-            {isLoading ? (
-              <button
-                type="button"
-                onClick={() => stopStreaming()}
-                className="relative flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-lg bg-blue-600 text-white transition-all duration-200 hover:bg-blue-700"
-                title="停止生成"
-                aria-label="停止生成"
-              >
-                <Loader2 className="absolute w-6 h-6 animate-spin text-white/80" />
-                <Square className="w-3.5 h-3.5" />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!input.trim() || isCallMode}
-                className="flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-lg bg-blue-600 text-white transition-all duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Send className="w-4 h-4" />
-              </button>
             )}
 
-            <button
-              type="button"
-              onClick={isCallMode ? stopCallMode : startCallMode}
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onPaste={handlePasteImage}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
+              placeholder="Message… (Shift+Enter for new line)"
               disabled={isLoading}
-              className={`flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-lg transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
-                isCallMode
-                  ? 'bg-red-600 text-white hover:bg-red-700'
-                  : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-              }`}
-              title={isCallMode ? '退出语音通话' : '开始语音通话'}
-              aria-label={isCallMode ? '退出语音通话' : '开始语音通话'}
-            >
-              {isCallMode ? <PhoneOff className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
-            </button>
+              rows={1}
+              className="block max-h-48 min-h-10 w-full resize-none bg-transparent px-3 py-2 text-base leading-6 text-slate-900 outline-none placeholder:text-slate-400 disabled:opacity-60"
+              style={{
+                height: 'auto',
+                overflowY: input.split('\n').length > 6 ? 'auto' : 'hidden'
+              }}
+              onInput={(e) => {
+                e.currentTarget.style.height = 'auto';
+                e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px';
+              }}
+            />
+
+            <div className="flex items-center gap-1 pt-1">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                className="ui-icon-btn h-9 w-9 rounded-full"
+                title="Upload image"
+                aria-label="Upload image"
+              >
+                <ImagePlus className="h-[18px] w-[18px]" />
+              </button>
+
+              <div className="ml-auto flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={isCallMode ? stopCallMode : startCallMode}
+                  disabled={isLoading}
+                  className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                    isCallMode
+                      ? 'bg-red-500 text-white hover:bg-red-600'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                  title={isCallMode ? '退出语音通话' : '开始语音通话'}
+                  aria-label={isCallMode ? '退出语音通话' : '开始语音通话'}
+                >
+                  {isCallMode ? <PhoneOff className="h-[18px] w-[18px]" /> : <AudioLines className="h-[18px] w-[18px]" />}
+                </button>
+
+                {isLoading ? (
+                  <button
+                    type="button"
+                    onClick={() => stopStreaming()}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-white transition-colors hover:bg-slate-700"
+                    title="停止生成"
+                    aria-label="停止生成"
+                  >
+                    <Square className="h-3.5 w-3.5 fill-current" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!canSend}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                    title="Send"
+                    aria-label="Send message"
+                  >
+                    <ArrowUp className="h-[18px] w-[18px]" />
+                  </button>
+                )}
+              </div>
+            </div>
           </form>
         </div>
       </div>
