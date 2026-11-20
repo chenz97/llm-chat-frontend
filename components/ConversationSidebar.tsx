@@ -85,7 +85,7 @@ export default function ConversationSidebar({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2">
         <div className="flex min-w-0 items-center gap-2 px-1">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 text-white">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-sm shadow-blue-600/20">
             <Sparkles className="h-4 w-4" />
           </div>
           <span className="truncate text-[15px] font-semibold text-slate-900">LLM Chat</span>
@@ -134,7 +134,7 @@ export default function ConversationSidebar({
                         onClick={() => handleSelect(conv.id)}
                         className={`block w-full truncate rounded-lg py-2 pl-2.5 pr-9 text-left text-sm transition-colors ${
                           isActive
-                            ? 'bg-slate-200/70 font-medium text-slate-900'
+                            ? 'bg-blue-600/10 font-medium text-blue-700'
                             : 'text-slate-600 hover:bg-slate-200/40 hover:text-slate-900'
                         }`}
                         title={conv.title}

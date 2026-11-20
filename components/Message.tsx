@@ -330,7 +330,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName, 
                 audioRecord.mimeType,
                 audioRecord.format
               )}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white transition-colors hover:bg-slate-700"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-700"
               title={isPlaying ? '暂停音频' : '播放音频'}
               aria-label={isPlaying ? '暂停音频' : '播放音频'}
             >
@@ -351,7 +351,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName, 
   );
 
   const editor = (
-    <div className="w-full rounded-2xl border border-slate-200 bg-white p-2 focus-within:border-slate-300">
+    <div className="w-full rounded-2xl border border-slate-200 bg-white p-2 focus-within:border-blue-300">
       <textarea
         value={editContent}
         onChange={(e) => setEditContent(e.target.value)}
@@ -398,7 +398,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName, 
         {imageGallery && <div className="flex w-full justify-end">{imageGallery}</div>}
         {audioList}
         {isEditing ? editor : message.content && (
-          <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-3xl bg-slate-100 px-4 py-2.5 text-[15px] leading-relaxed text-slate-900 sm:max-w-[75%]">
+          <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-3xl bg-blue-50 px-4 py-2.5 text-[15px] leading-relaxed text-slate-900 sm:max-w-[75%]">
             {message.content}
           </div>
         )}
@@ -414,7 +414,7 @@ export default function Message({ message, onEdit, onRegenerate, assistantName, 
   return (
     <div className="message-row">
       <div className="mb-1.5 flex items-center gap-2">
-        <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-slate-900 text-white">
+        <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white">
           <Bot className="h-3.5 w-3.5" />
         </div>
         <div className="truncate text-sm font-medium text-slate-700">{assistantLabel}</div>

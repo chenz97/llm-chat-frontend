@@ -1766,7 +1766,7 @@ export default function ChatInterface({
       >
         {isEmpty ? (
           <div className="chat-column flex h-full flex-col items-center justify-center pb-10 text-center">
-            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-md shadow-blue-600/20">
               <Sparkles className="h-5 w-5" />
             </div>
             <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">
@@ -1810,7 +1810,7 @@ export default function ChatInterface({
             <div className={`mb-2 flex items-center gap-3 rounded-2xl border px-4 py-2.5 ${
               callStatus === 'error'
                 ? 'border-red-200 bg-red-50 text-red-800'
-                : 'border-slate-200 bg-slate-50 text-slate-800'
+                : 'border-blue-100 bg-blue-50 text-blue-900'
             }`}>
               <div className={`call-status-pulse call-status-pulse-${callStatus}`} />
               <div className="min-w-0">
@@ -1824,7 +1824,7 @@ export default function ChatInterface({
 
           <form
             onSubmit={handleSubmit}
-            className="rounded-[26px] border border-slate-200 bg-white p-2 shadow-[0_2px_12px_-4px_rgba(15,23,42,0.08)] transition-colors focus-within:border-slate-300"
+            className="rounded-[26px] border border-slate-200 bg-white p-2 shadow-[0_2px_12px_-4px_rgba(15,23,42,0.08)] transition-[border-color,box-shadow] focus-within:border-blue-300 focus-within:shadow-[0_0_0_4px_rgba(37,99,235,0.08)]"
           >
             <input
               type="file"
@@ -1921,7 +1921,7 @@ export default function ChatInterface({
                   <button
                     type="button"
                     onClick={() => stopStreaming()}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-white transition-colors hover:bg-slate-700"
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-700"
                     title="停止生成"
                     aria-label="停止生成"
                   >
@@ -1931,7 +1931,7 @@ export default function ChatInterface({
                   <button
                     type="submit"
                     disabled={!canSend}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
                     title="Send"
                     aria-label="Send message"
                   >

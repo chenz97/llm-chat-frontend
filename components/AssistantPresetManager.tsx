@@ -464,7 +464,7 @@ export default function AssistantPresetManager() {
                     type="checkbox"
                     checked={formData.enableWebSearch === true}
                     onChange={(e) => setFormData({ ...formData, enableWebSearch: e.target.checked })}
-                    className="h-4 w-4 rounded border-slate-300 accent-slate-900"
+                    className="h-4 w-4 rounded border-slate-300 accent-blue-600"
                   />
                   Enable Web Search
                 </label>
@@ -474,7 +474,7 @@ export default function AssistantPresetManager() {
                     type="checkbox"
                     checked={formData.useVercelServerProxy === true}
                     onChange={(e) => setFormData({ ...formData, useVercelServerProxy: e.target.checked })}
-                    className="h-4 w-4 rounded border-slate-300 accent-slate-900"
+                    className="h-4 w-4 rounded border-slate-300 accent-blue-600"
                   />
                   Send requests via Vercel server proxy
                 </label>
@@ -652,7 +652,7 @@ export default function AssistantPresetManager() {
                         title={preset.isVisible === false ? 'Show in main assistant preset selector' : 'Hide from main assistant preset selector'}
                         onClick={() => toggleVisibility(preset)}
                         className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 transition-colors ${
-                          preset.isVisible === false ? 'bg-slate-300' : 'bg-slate-900'
+                          preset.isVisible === false ? 'bg-slate-300' : 'bg-blue-600'
                         }`}
                       >
                         <span
@@ -734,7 +734,7 @@ export default function AssistantPresetManager() {
                   type="checkbox"
                   checked={formData.enableWebSearch === true}
                   onChange={(e) => setFormData({ ...formData, enableWebSearch: e.target.checked })}
-                  className="h-4 w-4 rounded border-slate-300 accent-slate-900"
+                  className="h-4 w-4 rounded border-slate-300 accent-blue-600"
                 />
                 Enable Web Search
               </label>
@@ -744,7 +744,7 @@ export default function AssistantPresetManager() {
                   type="checkbox"
                   checked={formData.useVercelServerProxy === true}
                   onChange={(e) => setFormData({ ...formData, useVercelServerProxy: e.target.checked })}
-                  className="h-4 w-4 rounded border-slate-300 accent-slate-900"
+                  className="h-4 w-4 rounded border-slate-300 accent-blue-600"
                 />
                 Send requests via Vercel server proxy
               </label>
