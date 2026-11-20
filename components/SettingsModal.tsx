@@ -85,7 +85,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         aria-labelledby="settings-title"
       >
         <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3 sm:px-6">
-          <h2 id="settings-title" className="text-lg font-semibold text-slate-900">Settings</h2>
+          <h2 id="settings-title" className="text-xl font-semibold text-slate-900">Settings</h2>
           <button
             type="button"
             onClick={onClose}
@@ -106,7 +106,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 role="tab"
                 aria-selected={activeTab === tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-base font-medium transition-colors ${
                   activeTab === tab.id
                     ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-slate-500 hover:text-slate-900'

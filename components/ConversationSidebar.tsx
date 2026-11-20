@@ -109,7 +109,7 @@ export default function ConversationSidebar({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search"
-            className="ui-input h-9 border-transparent bg-slate-200/50 py-0 pl-8 hover:border-transparent focus:bg-white"
+            className="ui-input h-9 border-transparent bg-slate-200/50 py-0 pl-8 text-sm hover:border-transparent focus:bg-white"
             aria-label="Search conversations"
           />
         </div>

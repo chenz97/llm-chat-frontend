@@ -12,7 +12,7 @@ export default function FloatingStatus({ kind, message, onDismiss }: FloatingSta
   const isSuccess = kind === 'success';
 
   return (
-    <div className="fixed right-4 top-4 z-[70] max-w-sm rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-xl">
+    <div className="fixed right-4 top-4 z-[70] max-w-sm rounded-xl border border-slate-200 bg-white px-4 py-3 text-base shadow-xl">
       <div className="flex items-start gap-3">
         {isSuccess ? (
           <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-600" />

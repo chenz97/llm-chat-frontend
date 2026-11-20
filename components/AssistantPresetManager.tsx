@@ -365,7 +365,7 @@ export default function AssistantPresetManager() {
   return (
     <div className="space-y-3">
       {migrationNotice && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 flex items-start justify-between gap-3">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-base text-emerald-700 flex items-start justify-between gap-3">
           <span>{migrationNotice}</span>
           <button
             type="button"
@@ -377,7 +377,7 @@ export default function AssistantPresetManager() {
         </div>
       )}
       <div className="flex justify-between items-center">
-        <h2 className="text-base font-semibold text-slate-900">Assistant Presets</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Assistant Presets</h2>
         <button
           onClick={handleAdd}
           className="ui-btn ui-btn-primary"
@@ -459,7 +459,7 @@ export default function AssistantPresetManager() {
                   </select>
                 </div>
 
-                <label className="flex items-center gap-2 text-sm text-slate-700">
+                <label className="flex items-center gap-2 text-base text-slate-700">
                   <input
                     type="checkbox"
                     checked={formData.enableWebSearch === true}
@@ -469,7 +469,7 @@ export default function AssistantPresetManager() {
                   Enable Web Search
                 </label>
 
-                <label className="flex items-center gap-2 text-sm text-slate-700">
+                <label className="flex items-center gap-2 text-base text-slate-700">
                   <input
                     type="checkbox"
                     checked={formData.useVercelServerProxy === true}
@@ -584,24 +584,24 @@ export default function AssistantPresetManager() {
                   <div className="flex min-w-0 flex-1 items-start gap-2">
                     <div className="-ml-2 pt-0.5">{dragHandle}</div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-[15px] text-slate-900">{preset.name}</h3>
-                      <p className="text-sm text-slate-600 mt-0.5 break-all">Model: {preset.modelId}</p>
-                      <p className="text-[13px] text-slate-500 mt-0.5">
+                      <h3 className="font-semibold text-lg text-slate-900">{preset.name}</h3>
+                      <p className="text-base text-slate-600 mt-0.5 break-all">Model: {preset.modelId}</p>
+                      <p className="text-[15px] text-slate-500 mt-0.5">
                         API: {getRequestApiLabel(preset.requestApi)}
                       </p>
                       {preset.enableWebSearch && (
-                        <p className="text-[13px] text-slate-500 mt-0.5">Web Search: Enabled</p>
+                        <p className="text-[15px] text-slate-500 mt-0.5">Web Search: Enabled</p>
                       )}
-                      <p className="text-[13px] text-slate-500 mt-0.5">
+                      <p className="text-[15px] text-slate-500 mt-0.5">
                         Request mode: {preset.useVercelServerProxy ? 'Vercel proxy' : 'Browser direct'}
                       </p>
                       {preset.apiConfigId && (
-                        <p className="text-[13px] text-slate-500 mt-0.5">
+                        <p className="text-[15px] text-slate-500 mt-0.5">
                           Provider: {apiConfigs.find((config) => config.id === preset.apiConfigId)?.name || 'Unknown provider'}
                         </p>
                       )}
                       {preset.systemPrompt && (
-                        <p className="text-[13px] text-slate-500 mt-1 line-clamp-2">
+                        <p className="text-[15px] text-slate-500 mt-1 line-clamp-2">
                           {preset.systemPrompt}
                         </p>
                       )}
@@ -729,7 +729,7 @@ export default function AssistantPresetManager() {
                 </select>
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-slate-700">
+              <label className="flex items-center gap-2 text-base text-slate-700">
                 <input
                   type="checkbox"
                   checked={formData.enableWebSearch === true}
@@ -739,7 +739,7 @@ export default function AssistantPresetManager() {
                 Enable Web Search
               </label>
 
-              <label className="flex items-center gap-2 text-sm text-slate-700">
+              <label className="flex items-center gap-2 text-base text-slate-700">
                 <input
                   type="checkbox"
                   checked={formData.useVercelServerProxy === true}

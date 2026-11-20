@@ -116,10 +116,10 @@ export default function ConversationConfigSelector({
             className="config-popover absolute bottom-full left-0 right-0 z-30 mb-2 rounded-2xl border border-slate-200/90 bg-white p-3 shadow-[0_12px_32px_-8px_rgba(15,23,42,0.18),0_2px_6px_rgba(15,23,42,0.05)]"
           >
             <div className="mb-2.5 flex items-center justify-between px-0.5">
-              <span className="text-xs font-semibold text-slate-900">This conversation</span>
-              <span className="text-[11px] text-slate-400">Saved per chat</span>
+              <span className="text-sm font-semibold text-slate-900">This conversation</span>
+              <span className="text-xs text-slate-400">Saved per chat</span>
             </div>
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               <ConfigField label="API" htmlFor="api-config-select">
                 <select
                   id="api-config-select"
@@ -161,7 +161,7 @@ export default function ConversationConfigSelector({
                     const nextModelId = e.target.value || undefined;
                     onModelChange(nextModelId && nextModelId !== fallbackModelId ? nextModelId : undefined);
                   }}
-                  className={`${selectClass} font-mono text-[12.5px]`}
+                  className={`${selectClass} font-mono text-[15px]`}
                   disabled={modelOptions.length === 0}
                 >
                   {modelOptions.length === 0 ? (
@@ -195,10 +195,10 @@ export default function ConversationConfigSelector({
           }`}
         >
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold leading-5 text-slate-800">
+            <span className="block truncate text-base font-semibold leading-6 text-slate-800">
               {mounted ? title : 'Loading…'}
             </span>
-            <span className="block truncate text-xs leading-4 text-slate-500">
+            <span className="block truncate text-sm leading-5 text-slate-500">
               {mounted ? subtitle : '\u00a0'}
             </span>
           </span>
@@ -226,12 +226,12 @@ export default function ConversationConfigSelector({
   );
 }
 
-const selectClass = 'ui-input h-9 py-0 pl-2.5 text-[13px]';
+const selectClass = 'ui-input h-10 py-0 pl-3 text-base';
 
 function ConfigField({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
   return (
     <div>
-      <label htmlFor={htmlFor} className="mb-1 block px-0.5 text-[11px] font-medium text-slate-500">
+      <label htmlFor={htmlFor} className="mb-1 block px-0.5 text-sm font-medium text-slate-500">
         {label}
       </label>
       {children}

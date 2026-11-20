@@ -183,7 +183,7 @@ export default function ApiConfigManager() {
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-center">
-        <h2 className="text-base font-semibold text-slate-900">API Configurations</h2>
+        <h2 className="text-lg font-semibold text-slate-900">API Configurations</h2>
         <button
           onClick={handleAdd}
           className="ui-btn ui-btn-primary"
@@ -253,9 +253,9 @@ export default function ApiConfigManager() {
                 <div className="flex justify-between items-start gap-2">
                   <div className="-ml-2 pt-0.5">{dragHandle}</div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-[15px] text-slate-900">{config.name}</h3>
-                    <p className="text-sm text-slate-600 mt-0.5 break-all">{config.baseUrl}</p>
-                    <p className="text-[13px] text-slate-500 mt-0.5">
+                    <h3 className="font-semibold text-lg text-slate-900">{config.name}</h3>
+                    <p className="text-base text-slate-600 mt-0.5 break-all">{config.baseUrl}</p>
+                    <p className="text-[15px] text-slate-500 mt-0.5">
                       API Key: {config.apiKey ? '•'.repeat(20) : 'Not set'}
                     </p>
                     <div className="flex flex-wrap gap-1 mt-2">

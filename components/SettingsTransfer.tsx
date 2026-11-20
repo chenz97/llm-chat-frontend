@@ -226,7 +226,7 @@ export default function SettingsTransfer() {
     <div className="space-y-4">
       <div className="ui-card space-y-2">
         <h3 className="ui-section-title">Export Settings</h3>
-        <p className="text-sm text-slate-600">
+        <p className="text-base text-slate-600">
           Download a JSON backup of your API configurations and assistant presets.
         </p>
         <button
@@ -240,7 +240,7 @@ export default function SettingsTransfer() {
 
       <div className="ui-card space-y-2">
         <h3 className="ui-section-title">Import Settings</h3>
-        <p className="text-sm text-slate-600">
+        <p className="text-base text-slate-600">
           Import a JSON file to replace your existing API configurations and assistant presets.
         </p>
         <button
@@ -257,7 +257,7 @@ export default function SettingsTransfer() {
           onChange={handleImportChange}
           className="hidden"
         />
-        <p className="text-xs text-amber-700">
+        <p className="text-sm text-amber-700">
           Importing will overwrite existing settings.
         </p>
       </div>
@@ -265,14 +265,14 @@ export default function SettingsTransfer() {
       <div className="ui-card space-y-3">
         <div>
           <h3 className="ui-section-title">Encrypted GitHub Sync</h3>
-          <p className="text-sm text-slate-600">
+          <p className="text-base text-slate-600">
             Settings are encrypted in this browser (AES-256-GCM, passphrase-derived key) and stored as a file in a
             private GitHub repository. GitHub only ever sees ciphertext.
           </p>
         </div>
 
         {legacyGistId && (
-          <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             <ShieldAlert className="w-4 h-4 shrink-0" />
             <span>
               Gist sync has been removed because secret Gists are readable by anyone with the link and stored API keys
@@ -283,7 +283,7 @@ export default function SettingsTransfer() {
         )}
 
         <div className="grid gap-3">
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
+          <label className="grid gap-1.5 text-[15px] font-medium text-slate-700">
             GitHub Token
             <input
               type="password"
@@ -294,7 +294,7 @@ export default function SettingsTransfer() {
               className="ui-input"
             />
           </label>
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
+          <label className="grid gap-1.5 text-[15px] font-medium text-slate-700">
             Private Repository
             <input
               type="text"
@@ -304,7 +304,7 @@ export default function SettingsTransfer() {
               className="ui-input"
             />
           </label>
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
+          <label className="grid gap-1.5 text-[15px] font-medium text-slate-700">
             File Path
             <input
               type="text"
@@ -314,7 +314,7 @@ export default function SettingsTransfer() {
               className="ui-input"
             />
           </label>
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
+          <label className="grid gap-1.5 text-[15px] font-medium text-slate-700">
             Encryption Passphrase
             <input
               type="password"
@@ -354,7 +354,7 @@ export default function SettingsTransfer() {
           </button>
         </div>
 
-        <p className="text-xs text-slate-500">
+        <p className="text-sm text-slate-500">
           The token is stored only in this browser and is not included in exported settings JSON. The passphrase is
           never stored; if you lose it, the synced file cannot be recovered. Sync refuses to use a public repository.
         </p>
@@ -362,7 +362,7 @@ export default function SettingsTransfer() {
 
       {status && (
         <div
-          className={`rounded-lg border px-4 py-3 text-sm ${
+          className={`rounded-lg border px-4 py-3 text-base ${
             status.kind === 'success'
               ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
               : 'border-red-200 bg-red-50 text-red-700'
