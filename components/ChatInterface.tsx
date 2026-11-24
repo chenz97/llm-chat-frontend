@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import {
   AudioRecord,
@@ -201,6 +201,7 @@ export default function ChatInterface({
   const [callStatusMessage, setCallStatusMessage] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const streamingMessagesRef = useRef<{ conversationId: string; messages: ChatMessage[]; updatedAt: number } | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -234,6 +235,14 @@ export default function ChatInterface({
   const finishPlaybackRef = useRef<(() => void) | null>(null);
   const micVadRef = useRef<MicVadInstance | null>(null);
   const releaseCallResourcesRef = useRef<() => void>(() => {});
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [input, conversation?.id, apiConfig?.id]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -1866,6 +1875,7 @@ export default function ChatInterface({
             )}
 
             <textarea
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onPaste={handlePasteImage}
@@ -1878,15 +1888,7 @@ export default function ChatInterface({
               placeholder="Message… (Shift+Enter for new line)"
               disabled={isLoading}
               rows={1}
-              className="block max-h-48 min-h-10 w-full resize-none bg-transparent px-3 py-2 text-base leading-6 text-slate-900 outline-none placeholder:text-slate-400 disabled:opacity-60"
-              style={{
-                height: 'auto',
-                overflowY: input.split('\n').length > 6 ? 'auto' : 'hidden'
-              }}
-              onInput={(e) => {
-                e.currentTarget.style.height = 'auto';
-                e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px';
-              }}
+              className="block max-h-48 min-h-10 w-full resize-none overflow-y-auto bg-transparent px-3 py-2 text-base leading-6 text-slate-900 outline-none placeholder:text-slate-400 disabled:opacity-60"
             />
 
             <div className="flex items-center gap-1 pt-1">
