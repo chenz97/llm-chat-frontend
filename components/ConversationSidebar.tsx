@@ -2,23 +2,30 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ConversationSummary } from '@/types';
-import { getConversationSummaries, deleteConversation, setCurrentConversationId } from '@/lib/storage';
-import { Search, Sparkles, SquarePen, Trash2 } from 'lucide-react';
+import { getConversationSummaries, deleteConversation, renameConversation, setCurrentConversationId } from '@/lib/storage';
+import { Check, Pencil, Search, Sparkles, SquarePen, Trash2, X } from 'lucide-react';
 
 interface ConversationSidebarProps {
   currentConversationId: string | null;
   onSelectConversation: (id: string | null) => void;
   onNewConversation: () => void;
+  onRenameConversation: (id: string, title: string) => void;
 }
 
 export default function ConversationSidebar({
   currentConversationId,
   onSelectConversation,
   onNewConversation,
+  onRenameConversation,
 }: ConversationSidebarProps) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isReady, setIsReady] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editedTitle, setEditedTitle] = useState('');
+  const [renameError, setRenameError] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(false);
   const loadSequenceRef = useRef(0);
 
@@ -54,6 +61,50 @@ export default function ConversationSidebar({
       window.removeEventListener('conversationsUpdated', handleStorageChange);
     };
   }, [loadConversations, searchQuery]);
+
+  useEffect(() => {
+    if (editingId) {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }
+  }, [editingId]);
+
+  const handleStartRename = (conversation: ConversationSummary) => {
+    setEditingId(conversation.id);
+    setEditedTitle(conversation.title);
+    setRenameError('');
+  };
+
+  const handleCancelRename = () => {
+    if (isRenaming) return;
+    setEditingId(null);
+    setRenameError('');
+  };
+
+  const handleRename = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingId || isRenaming) return;
+
+    const title = editedTitle.trim();
+    if (!title) {
+      setRenameError('Enter a conversation name.');
+      titleInputRef.current?.focus();
+      return;
+    }
+
+    setIsRenaming(true);
+    const didSave = await renameConversation(editingId, title);
+    setIsRenaming(false);
+    if (!didSave) {
+      setRenameError('Could not save the name. Please try again.');
+      return;
+    }
+
+    onRenameConversation(editingId, title);
+    setEditingId(null);
+    setRenameError('');
+    window.dispatchEvent(new Event('conversationsUpdated'));
+  };
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -129,30 +180,104 @@ export default function ConversationSidebar({
                   const isActive = currentConversationId === conv.id;
                   return (
                     <li key={conv.id} className="group relative">
-                      <button
-                        type="button"
-                        onClick={() => handleSelect(conv.id)}
-                        className={`block w-full truncate rounded-lg py-2 pl-2.5 pr-9 text-left text-sm transition-colors ${
-                          isActive
-                            ? 'bg-blue-600/10 font-medium text-blue-700'
-                            : 'text-slate-600 hover:bg-slate-200/40 hover:text-slate-900'
-                        }`}
-                        title={conv.title}
-                        aria-current={isActive ? 'true' : undefined}
-                      >
-                        {conv.title}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => handleDelete(e, conv.id)}
-                        className={`ui-icon-btn ui-icon-btn-danger absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100 ${
-                          isActive ? '[@media(hover:hover)]:opacity-100' : ''
-                        }`}
-                        title="Delete conversation"
-                        aria-label={`Delete ${conv.title}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {editingId === conv.id ? (
+                        <form
+                          onSubmit={handleRename}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && event.nativeEvent.isComposing) {
+                              event.preventDefault();
+                              return;
+                            }
+                            if (event.key === 'Escape') {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              handleCancelRename();
+                            }
+                          }}
+                        >
+                          <div className="flex items-center gap-0.5">
+                            <input
+                              ref={titleInputRef}
+                              type="text"
+                              value={editedTitle}
+                              onChange={(event) => {
+                                setEditedTitle(event.target.value);
+                                setRenameError('');
+                              }}
+                              className="ui-input h-9 min-w-0 flex-1 px-2.5 py-0 text-sm"
+                              aria-label="Conversation name"
+                              aria-invalid={!!renameError}
+                              aria-describedby={renameError ? 'conversation-rename-error' : undefined}
+                              disabled={isRenaming}
+                            />
+                            <button
+                              type="submit"
+                              className="ui-icon-btn h-7 w-7"
+                              title="Save name"
+                              aria-label="Save conversation name"
+                              disabled={isRenaming}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCancelRename}
+                              className="ui-icon-btn h-7 w-7"
+                              title="Cancel rename"
+                              aria-label="Cancel rename"
+                              disabled={isRenaming}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                          {renameError && (
+                            <p id="conversation-rename-error" role="alert" className="px-2.5 pt-1 text-xs text-red-600">
+                              {renameError}
+                            </p>
+                          )}
+                        </form>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleSelect(conv.id)}
+                            className={`block w-full truncate rounded-lg py-2 pl-2.5 pr-16 text-left text-sm transition-colors ${
+                              isActive
+                                ? 'bg-blue-600/10 font-medium text-blue-700'
+                                : 'text-slate-600 hover:bg-slate-200/40 hover:text-slate-900'
+                            }`}
+                            title={conv.title}
+                            aria-current={isActive ? 'true' : undefined}
+                          >
+                            {conv.title}
+                          </button>
+                          <div
+                            className={`absolute right-1 top-1/2 flex -translate-y-1/2 gap-0.5 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 ${
+                              isActive ? '[@media(hover:hover)]:opacity-100' : ''
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleStartRename(conv)}
+                              className="ui-icon-btn h-7 w-7"
+                              title="Rename conversation"
+                              aria-label={`Rename ${conv.title}`}
+                              disabled={isRenaming}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDelete(e, conv.id)}
+                              className="ui-icon-btn ui-icon-btn-danger h-7 w-7"
+                              title="Delete conversation"
+                              aria-label={`Delete ${conv.title}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </li>
                   );
                 })}

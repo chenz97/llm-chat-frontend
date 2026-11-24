@@ -14,7 +14,7 @@ A local-first chat interface for OpenAI-compatible chat APIs. The app is built w
   - Image uploads (base64-encoded following OpenAI's format)
   - Markdown rendering with LaTeX math support
   - Syntax highlighting for code blocks
-- **Conversation Management**: Save, search, restore, edit, regenerate, and delete conversations with history
+- **Conversation Management**: Save, search, rename, restore, edit, regenerate, and delete conversations with history
 - **Customizable Parameters**: Set model parameters like `temperature`, `max_tokens`, `top_p`, and provider-specific fields per preset
 - **Browser-Local Persistence**: IndexedDB is the primary storage layer, with `localStorage` fallback or migration for some settings data
 - **Custom Ordering**: Reorder API configurations and assistant presets by dragging the grip handle in Settings (mouse, touch, or keyboard); the order is saved locally and used by the chat selectors
@@ -136,6 +136,10 @@ Notes:
 2. Select your API configuration and optionally an assistant preset
 3. Type your message or upload an image
 4. Press Enter or click the send arrow, or click the waveform button in the composer to start voice-call mode with a compatible Chat Completions audio model
+
+### Rename a Conversation
+
+In the sidebar history, hover over a conversation and click the pencil icon. On touch screens, the icon is always visible. Enter a name, then press Enter or click the checkmark to save. Press Escape or click the cancel icon to discard the edit. Saved names appear in conversation search and stay in place as you continue chatting.
 
 ### Encrypted Settings Sync
 

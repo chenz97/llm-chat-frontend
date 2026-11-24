@@ -1,7 +1,7 @@
 import type { ApiConfig, AssistantPreset, Conversation, ConversationSummary, ChatMessage, SettingsSyncConfig } from '@/types';
-import { indexConversation, matchesConversationIndex, summarizeConversation } from './conversationIndex';
-import type { ConversationIndexEntry } from './conversationIndex';
-import { sortByOrder } from './sortOrder';
+import { indexConversation, matchesConversationIndex, summarizeConversation } from './conversationIndex.ts';
+import type { ConversationIndexEntry } from './conversationIndex.ts';
+import { sortByOrder } from './sortOrder.ts';
 
 const STORAGE_KEYS = {
   API_CONFIGS: 'llm_chat_api_configs',
@@ -788,9 +788,15 @@ export async function saveConversation(conversation: Conversation): Promise<bool
   try {
     const db = await openDb();
     const tx = conversationWriteTransaction(db);
+    const store = tx.objectStore(tx.objectStoreNames.contains(DB_STORES.CONVERSATION_INDEX)
+      ? DB_STORES.CONVERSATION_INDEX
+      : DB_STORES.CONVERSATIONS);
+    const existing = await requestToPromise<ConversationSummary | undefined>(store.get(conversation.id));
 
     const payload = {
       ...conversation,
+      // A response can finish with a snapshot captured before a title edit.
+      ...(existing?.isTitleEdited ? { title: existing.title, isTitleEdited: true } : {}),
       updatedAt: Date.now(),
     };
 
@@ -799,6 +805,34 @@ export async function saveConversation(conversation: Conversation): Promise<bool
     return true;
   } catch (error) {
     console.error('Error saving conversation to IndexedDB:', error);
+    return false;
+  }
+}
+
+export async function renameConversation(conversationId: string, title: string): Promise<boolean> {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle || !isIndexedDbAvailable()) return false;
+
+  try {
+    const db = await openDb();
+    const tx = conversationWriteTransaction(db);
+    const store = tx.objectStore(DB_STORES.CONVERSATIONS);
+    const existing = await requestToPromise<Conversation | undefined>(store.get(conversationId));
+
+    if (!existing) {
+      await transactionComplete(tx);
+      return false;
+    }
+
+    putConversation(tx, {
+      ...existing,
+      title: trimmedTitle,
+      isTitleEdited: true,
+    });
+    await transactionComplete(tx);
+    return true;
+  } catch (error) {
+    console.error('Error renaming conversation in IndexedDB:', error);
     return false;
   }
 }

@@ -160,6 +160,7 @@ export interface WebSearchCall {
 export interface Conversation {
   id: string;
   title: string;
+  isTitleEdited?: boolean;
   apiConfigId: string;
   assistantPresetId?: string;
   modelIdOverride?: string;

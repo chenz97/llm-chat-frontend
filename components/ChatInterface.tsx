@@ -1224,7 +1224,7 @@ export default function ChatInterface({
   }, []);
 
   const resolveTitle = (baseMessages: ChatMessage[], titleSeed?: string) => {
-    if (!conversation || conversation.title !== 'New Conversation') {
+    if (!conversation || conversation.isTitleEdited || conversation.title !== 'New Conversation') {
       return conversation?.title || 'New Conversation';
     }
 

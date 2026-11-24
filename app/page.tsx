@@ -270,6 +270,12 @@ export default function Home() {
     }
   };
 
+  const handleConversationRename = (id: string, title: string) => {
+    setCurrentConversation((conversation) => conversation?.id === id
+      ? { ...conversation, title, isTitleEdited: true }
+      : conversation);
+  };
+
   const handleApiConfigChange = (id: string) => {
     setSelectedApiConfigId(id);
     setSelectedModelIdOverride(undefined);
@@ -359,6 +365,7 @@ export default function Home() {
         currentConversationId={currentConversation?.id || null}
         onSelectConversation={handleSelectConversation}
         onNewConversation={handleNewConversation}
+        onRenameConversation={handleConversationRename}
       />
 
       {currentConversation && (

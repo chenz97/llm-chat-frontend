@@ -8,6 +8,7 @@ export function summarizeConversation(conversation: ConversationSummary): Conver
   return {
     id: conversation.id,
     title: conversation.title,
+    isTitleEdited: conversation.isTitleEdited,
     apiConfigId: conversation.apiConfigId,
     assistantPresetId: conversation.assistantPresetId,
     modelIdOverride: conversation.modelIdOverride,
