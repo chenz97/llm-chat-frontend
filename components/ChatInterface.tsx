@@ -28,9 +28,9 @@ import {
 import {
   streamChatCompletion,
   convertToOpenAIMessages,
-  convertToResponsesInput,
   mergeReasoningDetails,
 } from '@/lib/api';
+import { buildResponsesRequest } from '@/lib/responsesRequest';
 import {
   buildAudioChatCompletionRequest,
   buildTextAudioChatCompletionRequest,
@@ -147,28 +147,6 @@ const normalizeRequestParameters = (
   return responseParameters;
 };
 
-const findLatestAssistantResponseId = (
-  messages: ChatMessage[]
-): { responseId: string; assistantIndex: number } | null => {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.role !== 'assistant') {
-      continue;
-    }
-
-    if (typeof message.responseId === 'string' && message.responseId.trim()) {
-      return {
-        responseId: message.responseId,
-        assistantIndex: index,
-      };
-    }
-
-    return null;
-  }
-
-  return null;
-};
-
 const mergeProviderMetadata = (
   current: ProviderMetadata | undefined,
   next: Partial<ProviderMetadata>
@@ -217,6 +195,7 @@ export default function ChatInterface({
   const persistInFlightRef = useRef(false);
   const pendingPersistRef = useRef<{ id: string; messages: ChatMessage[] } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const statelessResponsesEndpointsRef = useRef<Set<string> | null>(null);
   const deepLinkActionHandledRef = useRef(false);
   const submitPromptRef = useRef<(promptText: string) => Promise<void>>(async () => {});
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -1325,19 +1304,25 @@ export default function ChatInterface({
       || 'gpt-3.5-turbo';
     const requestParameters = normalizeRequestParameters(requestApi, resolvedPreset?.parameters);
     let request: ChatCompletionRequest | ResponsesRequest;
+    let buildStatelessResponsesRequest: (() => ResponsesRequest) | undefined;
 
     if (requestApi === 'responses') {
-      const latestAssistantResponse = findLatestAssistantResponseId(baseMessages);
-      const incrementalMessages = latestAssistantResponse
-        ? baseMessages.slice(latestAssistantResponse.assistantIndex + 1)
-        : baseMessages;
-
-      request = {
+      const baseUrl = resolvedApiConfig.baseUrl.trim();
+      const responseOptions = {
+        baseUrl,
         model,
-        input: convertToResponsesInput(incrementalMessages),
-        ...(resolvedPreset?.systemPrompt ? { instructions: resolvedPreset.systemPrompt } : {}),
-        ...(latestAssistantResponse ? { previous_response_id: latestAssistantResponse.responseId } : {}),
-        ...requestParameters,
+        messages: baseMessages,
+        systemPrompt: resolvedPreset?.systemPrompt,
+        parameters: requestParameters,
+      };
+      request = buildResponsesRequest({
+        ...responseOptions,
+        replayHistory: statelessResponsesEndpointsRef.current?.has(baseUrl),
+      });
+      buildStatelessResponsesRequest = () => {
+        const endpoints = statelessResponsesEndpointsRef.current ??= new Set();
+        endpoints.add(baseUrl);
+        return buildResponsesRequest({ ...responseOptions, replayHistory: true });
       };
     } else {
       const apiMessages = convertToOpenAIMessages(baseMessages);
@@ -1555,6 +1540,7 @@ export default function ChatInterface({
           requestApi,
           enableWebSearch: resolvedPreset?.enableWebSearch === true,
           useVercelServerProxy: resolvedPreset?.useVercelServerProxy === true,
+          buildStatelessResponsesRequest,
         }
       );
     } catch (error) {

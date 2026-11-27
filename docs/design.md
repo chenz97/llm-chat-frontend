@@ -51,7 +51,7 @@ This design avoids presenting an empty shell when valid provider settings alread
 
 ## Request Construction
 
-`components/ChatInterface.tsx` and `lib/api.ts` jointly build provider requests.
+`components/ChatInterface.tsx` resolves the preset and conversation history. `lib/api.ts` formats Chat Completions messages and handles streaming, and `lib/responsesRequest.ts` builds Responses requests.
 
 Request resolution rules:
 
@@ -64,10 +64,11 @@ Request resolution rules:
 - Presets with `isVisible === false` are hidden from the main assistant preset selector. Missing `isVisible` is treated as visible for backward compatibility. If an existing conversation already references a hidden preset, the selector keeps that current hidden value visible as a labeled current option so the displayed configuration remains consistent with the conversation.
 - Chat-completions requests always add or merge `stream_options.include_usage = true` so providers that support it can return token metrics during or after streaming.
 - Persisted assistant reasoning metadata is replayed in outbound chat-completions history only when it comes from a normally completed assistant turn and still contains the required replay signatures after normalization. Interrupted or failed turns keep their reasoning metadata for local display/debug use, but that incomplete state is not replayed upstream.
-- Responses requests map the preset `systemPrompt` to `instructions`, emit multimodal user turns as `input_text` plus `input_image`, translate preset `max_tokens` to `max_output_tokens` when no explicit Responses-specific value is present, translate legacy top-level `reasoning_effort` into `reasoning.effort`, and otherwise continue passing preset parameters through to the provider except for chat-completions-specific `stream_options`.
-- When the latest assistant message in the current request slice contains a persisted Responses `responseId`, the next Responses request uses that value as `previous_response_id` and only sends the incremental messages that follow that assistant. If no valid `responseId` chain exists, the app falls back to replaying the full request slice as `input`.
+- Responses requests map the preset `systemPrompt` to `instructions`, translate `max_tokens` to `max_output_tokens` when the preset supplies no explicit Responses value, translate top-level `reasoning_effort` into `reasoning.effort`, and omit Chat Completions `stream_options`.
+- OpenRouter Responses requests replay the current conversation history in `input`, including user images and earlier assistant replies with `output_text` content. The request builder omits `previous_response_id` and drops `store: true` when a preset supplies it.
+- Other Responses endpoints can continue from a saved `responseId` on the latest assistant message using `previous_response_id` and incremental input. If the endpoint returns HTTP 400 reporting that the field is unsupported, the app retries once with the conversation history and replays history on later turns until the page reloads. Requests without a saved continuation ID replay the current request history.
 
-User images are represented as OpenAI-style `content` arrays that contain one text item followed by one `image_url` item per attached image. Stored user messages now prefer `imageUrls` for multi-image turns while still reading legacy single-image `imageUrl` values from older conversations.
+User image messages contain one text item followed by one image item per attachment. Chat Completions uses `text` and `image_url` items. Responses uses `input_text` and `input_image` items. Stored user messages use `imageUrls` for multiple images and read the legacy `imageUrl` field from older conversations.
 
 Voice-call requests use `lib/audioChat.ts` rather than the text SSE parser. The helper creates streaming Chat Completions requests with `modalities: ["text", "audio"]` by default and only includes `audio` when the selected preset supplies it through Model Parameters. Existing preset Model Parameters are merged after parsing JSON-like string values, so provider-specific `audio.voice`, `audio.format`, `modalities`, and other request fields can be supplied without a new settings surface.
 

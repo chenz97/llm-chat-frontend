@@ -125,9 +125,9 @@ The chat send path now builds either a chat-completions payload or a Responses p
 
 The Responses compatibility layer also remaps legacy top-level `reasoning_effort` preset parameters into `reasoning.effort`, which keeps existing assistant presets usable when switching from chat completions to responses.
 
-It keeps the guaranteed-safe compatibility remaps (`max_tokens` and `reasoning_effort`) but otherwise continues passing preset parameters through to the provider, because third-party OpenAI-compatible Responses implementations may accept fields that are not documented in OpenAI's own Responses reference.
+The initial implementation passed through other preset parameters to support fields specific to third-party Responses implementations.
 
-Responses assistant messages now also persist the upstream `response.id`. When the next Responses request is created and the latest assistant message in the request slice has that saved id, the client sends only the incremental messages after that assistant and includes `previous_response_id`. If a conversation was created before this change, mixes APIs, or otherwise lacks a valid saved Responses id at the latest assistant boundary, the client falls back to replaying the full request slice as `input`.
+Responses assistant messages persist the upstream `response.id`. OpenRouter Responses requests carry the conversation history in `input` for every turn. For other providers, the client uses a saved response ID on the latest assistant message to send `previous_response_id` and incremental input. The client replays the conversation history when a saved ID is unavailable or the endpoint reports that `previous_response_id` is unsupported.
 
 This makes OpenAI-style Responses conversation-state carryover available without persisting hidden chain-of-thought content in browser storage. The continuation state lives in the upstream provider through `previous_response_id`, while the local app keeps only the assistant-visible output plus the upstream response identifier.
 

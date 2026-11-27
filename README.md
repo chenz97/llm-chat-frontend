@@ -115,6 +115,8 @@ Create reusable assistant configurations:
    - **Send requests via Vercel server proxy**: When enabled, requests are sent to the app's `/api/chat/completions` route first and then forwarded server-side
    - **Parameters**: Add model parameters like temperature, max_tokens, etc.
 
+OpenRouter Responses requests include the conversation history on every turn, so Claude and other models can use earlier messages and images. See [OpenRouter's guide to multi-turn Responses requests](https://openrouter.ai/docs/api_reference/responses/basic-usage#multiple-turn-conversations).
+
 For example, use Base URL `https://openrouter.ai/api/v1` with model `openai/gpt-5.2`, select `Responses API`, enable `Web Search`, and ask "What are today's main technology news stories?" OpenAI configurations use `https://api.openai.com/v1`. Both providers also accept the full `/responses` endpoint as the Base URL. The app selects `openrouter:web_search` for OpenRouter and `web_search` for OpenAI. See the [OpenRouter Web Search documentation](https://openrouter.ai/docs/guides/features/server-tools/web-search) for supported search parameters.
 
 When the model searches, a Web Search panel shows the progress, search terms, and page-reading activity supplied by the provider above the answer. Search activity is saved with the conversation. Citations appear as clickable links, preserving source links already present in the answer. The Web Search preference is included in settings exports and imports and works with direct requests and the Vercel server proxy.

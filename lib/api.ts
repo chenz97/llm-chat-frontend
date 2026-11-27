@@ -1,4 +1,4 @@
-import {
+import type {
   Message,
   ChatCompletionRequest,
   TokenUsage,
@@ -6,16 +6,15 @@ import {
   ProviderMetadata,
   ChatMessage,
   RequestApi,
-  ResponsesInputMessage,
   ResponsesRequest,
   UrlCitation,
   WebSearchCall,
 } from '@/types';
-import { normalizeError } from '@/lib/errorUtils';
-import { getMessageImageUrls } from '@/lib/imageUtils';
-import { withWebSearch } from '@/lib/webSearch';
-import { extractResponseCitations } from '@/lib/responseCitations';
-import { updateWebSearchCalls } from '@/lib/webSearchActivity';
+import { normalizeError } from './errorUtils.ts';
+import { getMessageImageUrls } from './imageUtils.ts';
+import { withWebSearch } from './webSearch.ts';
+import { extractResponseCitations } from './responseCitations.ts';
+import { updateWebSearchCalls } from './webSearchActivity.ts';
 
 const VERCEL_PROXY_ENDPOINT = '/api/chat/completions';
 const DEFAULT_REQUEST_API: RequestApi = 'chat_completions';
@@ -25,6 +24,7 @@ export interface StreamOptions {
   requestApi?: RequestApi;
   enableWebSearch?: boolean;
   useVercelServerProxy?: boolean;
+  buildStatelessResponsesRequest?: () => ResponsesRequest;
 }
 
 export interface StreamCallbacks {
@@ -509,41 +509,45 @@ export async function streamChatCompletion(
     const shouldUseServerProxy = options?.useVercelServerProxy === true;
     const requestApi = normalizeRequestApi(options?.requestApi);
     const normalizedBaseUrl = baseUrl.trim();
-    const preparedRequest = withWebSearch(request, {
-      baseUrl: normalizedBaseUrl,
-      requestApi,
-      enabled: options?.enableWebSearch,
-    });
+    const endpoint = shouldUseServerProxy
+      ? VERCEL_PROXY_ENDPOINT
+      : resolveApiEndpoint(normalizedBaseUrl, requestApi);
 
-    const response = shouldUseServerProxy
-      ? await fetch(VERCEL_PROXY_ENDPOINT, {
+    const sendRequest = (body: ChatCompletionRequest | ResponsesRequest) => {
+      const preparedRequest = withWebSearch({ ...body, stream: true }, {
+        baseUrl: normalizedBaseUrl,
+        requestApi,
+        enabled: options?.enableWebSearch,
+      });
+      return fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(!shouldUseServerProxy ? { 'Authorization': `Bearer ${apiKey}` } : {}),
         },
-        body: JSON.stringify({
+        body: JSON.stringify(shouldUseServerProxy ? {
           baseUrl: normalizedBaseUrl,
           apiKey,
           requestApi,
-          request: {
-            ...preparedRequest,
-            stream: true,
-          },
-        }),
-        signal: options?.signal,
-      })
-      : await fetch(resolveApiEndpoint(normalizedBaseUrl, requestApi), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          ...preparedRequest,
-          stream: true,
-        }),
+          request: preparedRequest,
+        } : preparedRequest),
         signal: options?.signal,
       });
+    };
+
+    let response = await sendRequest(request);
+    if (
+      response.status === 400
+      && requestApi === 'responses'
+      && typeof request.previous_response_id === 'string'
+      && options?.buildStatelessResponsesRequest
+    ) {
+      const errorText = await response.text();
+      if (!/\bprevious_response_id\b['"`]?\s+is\s+not\s+supported\b/i.test(errorText)) {
+        throw new Error(`API request failed: ${response.status} ${errorText}`);
+      }
+      response = await sendRequest(options.buildStatelessResponsesRequest());
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -740,31 +744,5 @@ export function convertToOpenAIMessages(
     }
 
     return message;
-  });
-}
-
-export function convertToResponsesInput(
-  messages: ChatMessage[]
-): ResponsesInputMessage[] {
-  return messages.map((msg) => {
-    const imageUrls = msg.role === 'user' ? getMessageImageUrls(msg) : [];
-
-    if (msg.role === 'user' && imageUrls.length > 0) {
-      return {
-        role: 'user',
-        content: [
-          { type: 'input_text' as const, text: msg.content },
-          ...imageUrls.map((imageUrl) => ({
-            type: 'input_image' as const,
-            image_url: imageUrl,
-          })),
-        ],
-      };
-    }
-
-    return {
-      role: msg.role as 'system' | 'user' | 'assistant',
-      content: msg.content,
-    };
   });
 }

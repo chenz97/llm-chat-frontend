@@ -1,4 +1,5 @@
 import type { RequestApi } from '@/types';
+import { getResponsesProvider } from './responsesRequest.ts';
 
 interface WebSearchOptions {
   baseUrl: string;
@@ -14,24 +15,11 @@ export function withWebSearch<T extends Record<string, unknown>>(
     return request;
   }
 
-  let toolType: 'web_search' | 'openrouter:web_search';
-  try {
-    const url = new URL(baseUrl);
-    const path = url.pathname.replace(/\/$/, '');
-    if (url.username || url.password || url.search || url.hash) {
-      return request;
-    }
-
-    if (url.origin === 'https://api.openai.com' && (path === '/v1' || path === '/v1/responses')) {
-      toolType = 'web_search';
-    } else if (url.origin === 'https://openrouter.ai' && (path === '/api/v1' || path === '/api/v1/responses')) {
-      toolType = 'openrouter:web_search';
-    } else {
-      return request;
-    }
-  } catch {
+  const provider = getResponsesProvider(baseUrl);
+  if (!provider) {
     return request;
   }
+  const toolType = provider === 'openrouter' ? 'openrouter:web_search' : 'web_search';
 
   const tools = Array.isArray(request.tools) ? request.tools : [];
   if (tools.some((tool) => (

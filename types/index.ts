@@ -46,9 +46,17 @@ export interface ResponsesInputMessage {
   content: string | ResponsesInputContent[];
 }
 
+export interface ResponsesOutputMessage {
+  type: 'message';
+  role: 'assistant';
+  id: string;
+  status: 'completed';
+  content: { type: 'output_text'; text: string; annotations: unknown[] }[];
+}
+
 export interface ResponsesRequest {
   model: string;
-  input: ResponsesInputMessage[];
+  input: (ResponsesInputMessage | ResponsesOutputMessage)[];
   instructions?: string;
   previous_response_id?: string;
   stream?: boolean;

@@ -1,4 +1,4 @@
-import { ChatMessage } from '@/types';
+import type { ChatMessage } from '@/types';
 
 export async function convertImageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

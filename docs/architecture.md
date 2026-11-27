@@ -89,7 +89,7 @@ This storage module also exposes application-level operations such as `getCurren
 
 ## Chat Request And Streaming Flow
 
-The end-to-end chat path is split across `components/ChatInterface.tsx`, `lib/api.ts`, and optionally `app/api/chat/completions/route.ts`.
+The end-to-end chat path runs through `components/ChatInterface.tsx`, `lib/responsesRequest.ts` for Responses request construction, `lib/api.ts` for streaming, and optionally `app/api/chat/completions/route.ts` for forwarding.
 
 `lib/chatDeepLink.ts` contains the parser for URL-driven chat actions. It
 normalizes `prompt` and `autoSend` from either query string or hash parameters,
@@ -101,8 +101,8 @@ Flow for a normal message:
 
 1. `ChatInterface` collects user text and zero or more uploaded image data URLs.
 2. The component persists a pending assistant placeholder message so the conversation exists before streaming completes.
-3. `ChatInterface` resolves the selected preset request API mode. Chat-completions presets build `messages` and prepend the preset system prompt as a system message, while Responses presets build `input` items, map the preset system prompt to `instructions`, and reuse the latest saved assistant `response.id` as `previous_response_id` when a valid Responses chain exists.
-4. `lib/api.ts` emits one text item plus one image item per attached user image, targets either `/chat/completions` or `/responses`, and preserves the existing proxy-vs-direct transport choice.
+3. `ChatInterface` resolves the selected preset request API mode. Chat Completions sends `messages` with the preset system prompt as a system message. Responses sends `input` with the preset system prompt as `instructions`. OpenRouter Responses requests include the full conversation history. Other Responses providers use `previous_response_id` and incremental input when the latest assistant message has a saved response ID.
+4. Both request builders emit one text item plus one image item per attached user image. `lib/api.ts` sends the body to `/chat/completions` or `/responses`, either directly or through the server proxy. If a Responses endpoint returns HTTP 400 reporting that `previous_response_id` is unsupported, `lib/api.ts` retries with the conversation history.
 5. `lib/api.ts` parses SSE `data:` lines, extracts assistant content, best-effort reasoning text, reasoning details, token usage, provider metadata, and Responses `response.id`, then feeds incremental callbacks back into `ChatInterface`. `ChatInterface` merges repeated reasoning-detail chunks into stable blocks, and later chat-completions requests normalize saved reasoning metadata again before replaying only assistant turns that completed normally and still carry the required signatures.
 6. `ChatInterface` updates in-memory messages, serializes partial conversation writes and keeps only the latest queued update, flushes pending persistence when the page is backgrounded, and performs a final full save when streaming completes, is stopped, or fails mid-stream.
 
